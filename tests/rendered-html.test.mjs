@@ -93,3 +93,11 @@ test("monthly detail is collapsed by default and can be expanded accessibly", as
   assert.match(source, /Show monthly detail/);
   assert.match(source, /showMonthlyDetail &&/);
 });
+
+test("selection controls retain high contrast in dark mode", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /--control-surface: #ffffff/);
+  assert.match(styles, /--control-text: #0c2540/);
+  assert.match(styles, /-webkit-text-fill-color: var\(--control-text\)/);
+  assert.match(styles, /\.controls select:disabled \{ opacity: 1; \}/);
+});

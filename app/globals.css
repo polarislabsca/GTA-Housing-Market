@@ -27,6 +27,8 @@
   --table-head: #eef4f8;
   --table-head-text: #3b566d;
   --row-hover: #f8fbfd;
+  --control-surface: #ffffff;
+  --control-text: #0c2540;
   color-scheme: light;
 }
 
@@ -57,6 +59,8 @@ html[data-theme="dark"] {
   --table-head: #193044;
   --table-head-text: #d3e2eb;
   --row-hover: #192e40;
+  --control-surface: #ffffff;
+  --control-text: #0c2540;
   color-scheme: dark;
 }
 
@@ -181,11 +185,13 @@ h1 { margin: 0; max-width: 820px; font-size: clamp(2.65rem, 5vw, 5.35rem); line-
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 11px;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2307304d' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 15px center;
-  color: var(--ink);
+  background: var(--control-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2307304d' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 15px center;
+  color: var(--control-text);
+  -webkit-text-fill-color: var(--control-text);
   padding: 0 42px 0 14px;
   outline: none;
 }
+.controls select:disabled { opacity: 1; }
 .controls select:focus { box-shadow: 0 0 0 3px rgba(67, 214, 205, 0.35); }
 
 .status-message { margin: 28px 0; padding: 22px; text-align: center; color: var(--muted); }
