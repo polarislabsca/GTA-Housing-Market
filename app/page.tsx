@@ -61,6 +61,16 @@ function percentChange(current: number | null, previous: number | null) {
   return (current / previous - 1) * 100;
 }
 
+function changePhrase(change: number | null, subject: string) {
+  if (change == null) return `${subject} could not be compared across the selected period.`;
+  if (Math.abs(change) < 1) return `${subject} was broadly unchanged between the first and last selected month.`;
+  return `${subject} ${change > 0 ? "increased" : "decreased"} ${Math.abs(change).toFixed(1)}% between the first and last selected month.`;
+}
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
 function Delta({ value, suffix = "vs. period start" }: { value: number | null; suffix?: string }) {
   if (value == null) return <span className="delta neutral">Not available</span>;
   const direction = value > 0.05 ? "up" : value < -0.05 ? "down" : "neutral";
@@ -260,6 +270,27 @@ export default function Home() {
   const priceChange = percentChange(latest?.averagePrice ?? null, first?.averagePrice ?? null);
   const salesPoints = selected.map((record) => ({ date: record.date, value: record.sales }));
   const pricePoints = selected.map((record) => ({ date: record.date, value: record.averagePrice, secondary: record.medianPrice }));
+  const marketSummary = useMemo(() => {
+    if (!first || !latest) return [];
+    const summary = [
+      `${changePhrase(salesChange, "Monthly sales")} The latest month recorded ${integerFormatter.format(latest.sales)} sales.`,
+      `${changePhrase(priceChange, propertyType === "All property types" ? "The sales-weighted average price" : "The average price")} The latest average was ${latest.averagePrice == null ? "not reported" : currencyFormatter.format(latest.averagePrice)}.`,
+    ];
+    if (selected.length >= 6) {
+      const recent = average(selected.slice(-3).map((record) => record.sales));
+      const previous = average(selected.slice(-6, -3).map((record) => record.sales));
+      const momentum = percentChange(recent, previous);
+      if (momentum != null) {
+        summary.push(`Recent sales momentum was ${Math.abs(momentum) < 1 ? "stable" : momentum > 0 ? "positive" : "negative"}: the latest three-month average was ${Math.abs(momentum).toFixed(1)}% ${momentum >= 0 ? "above" : "below"} the preceding three months.`);
+      }
+    }
+    const peakSales = selected.reduce((peak, record) => record.sales > peak.sales ? record : peak, selected[0]);
+    const supply = latest.activeListings == null ? "Active listings were not reported" : `There were ${integerFormatter.format(latest.activeListings)} active listings`;
+    const inventory = latest.monthsOfInventory == null ? "" : `, equal to ${latest.monthsOfInventory.toFixed(2)} raw months of inventory`;
+    const pace = latest.daysOnMarket == null ? "" : `, while the average listing took ${integerFormatter.format(latest.daysOnMarket)} days to sell`;
+    summary.push(`${supply}${inventory}${pace}. The highest sales month in the selected period was ${monthLabel(peakSales.date)}, with ${integerFormatter.format(peakSales.sales)} sales.`);
+    return summary;
+  }, [first, latest, priceChange, propertyType, salesChange, selected]);
 
   function updateStart(value: string) {
     setStartDate(value);
@@ -363,6 +394,17 @@ export default function Home() {
               <p>{monthLabel(startDate)} to {monthLabel(endDate)}</p>
             </div>
             <p className="summary-context">Latest month in range: <strong>{monthLabel(latest.date)}</strong></p>
+          </section>
+
+          <section className="market-summary" aria-labelledby="market-summary-title">
+            <div>
+              <p className="eyebrow">Automatic analysis</p>
+              <h2 id="market-summary-title">Market summary</h2>
+              <p>{city}<br />{propertyType}<br />{monthLabel(startDate)}–{monthLabel(endDate)}</p>
+            </div>
+            <ul>
+              {marketSummary.map((statement) => <li key={statement}>{statement}</li>)}
+            </ul>
           </section>
 
           <section className="kpi-grid" aria-label="Latest selected metrics">

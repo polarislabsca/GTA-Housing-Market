@@ -65,3 +65,11 @@ test("dashboard data includes complete monthly city and property-type coverage",
     { sales: 3256, averagePrice: 1364204, activeListings: 12635 },
   );
 });
+
+test("dashboard source includes the responsive automatic market summary", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /Automatic analysis/);
+  assert.match(source, /Recent sales momentum/);
+  assert.match(source, /highest sales month/i);
+  assert.match(source, /raw months of inventory/);
+});
