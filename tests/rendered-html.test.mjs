@@ -24,6 +24,11 @@ test("server-renders the housing dashboard shell and metadata", async () => {
   assert.match(html, /Download linked Excel data/);
   assert.match(html, /City or area/);
   assert.match(html, /Property type/);
+  assert.match(html, /All property types/);
+  assert.match(html, /From year/);
+  assert.match(html, /From month/);
+  assert.match(html, /To year/);
+  assert.match(html, /To month/);
   assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });

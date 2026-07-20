@@ -30,11 +30,26 @@ type DashboardData = {
 };
 
 const monthFormatter = new Intl.DateTimeFormat("en-CA", { month: "short", year: "numeric", timeZone: "UTC" });
+const monthOnlyFormatter = new Intl.DateTimeFormat("en-CA", { month: "long", timeZone: "UTC" });
 const currencyFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
 const integerFormatter = new Intl.NumberFormat("en-CA", { maximumFractionDigits: 0 });
 
+const REGION_MEMBERS: { label: string; cities: string[] }[] = [
+  { label: "Toronto", cities: ["City of Toronto", "Toronto Central", "Toronto East", "Toronto West"] },
+  { label: "York Region", cities: ["York Region", "Aurora", "East Gwillimbury", "Georgina", "King", "Markham", "Newmarket", "Richmond Hill", "Stouffville", "Vaughan", "Whitchurch-Stouffville"] },
+  { label: "Peel Region", cities: ["Peel Region", "Brampton", "Caledon", "Mississauga"] },
+  { label: "Durham Region", cities: ["Durham Region", "Ajax", "Brock", "Clarington", "Oshawa", "Pickering", "Scugog", "Uxbridge", "Whitby"] },
+  { label: "Halton Region", cities: ["Halton Region", "Burlington", "Halton Hills", "Milton", "Oakville"] },
+  { label: "Simcoe County", cities: ["Simcoe County", "Adjala-Tosorontio", "Bradford", "Bradford West Gwillimbury", "Essa", "Innisfil", "New Tecumseth"] },
+  { label: "Dufferin County", cities: ["Dufferin County", "Orangeville"] },
+];
+
 function monthLabel(date: string) {
   return monthFormatter.format(new Date(`${date}T00:00:00Z`));
+}
+
+function monthOnlyLabel(date: string) {
+  return monthOnlyFormatter.format(new Date(`${date}T00:00:00Z`));
 }
 
 function compactCurrency(value: number) {
@@ -53,6 +68,22 @@ function Delta({ value, suffix = "vs. period start" }: { value: number | null; s
 }
 
 type Point = { date: string; value: number | null; secondary?: number | null };
+
+function smoothPath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+  return points.reduce((path, point, index) => {
+    if (index === 0) return `M${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+    const previous = points[index - 1];
+    const beforePrevious = points[index - 2] ?? previous;
+    const next = points[index + 1] ?? point;
+    const control1X = previous.x + (point.x - beforePrevious.x) / 6;
+    const control1Y = previous.y + (point.y - beforePrevious.y) / 6;
+    const control2X = point.x - (next.x - previous.x) / 6;
+    const control2Y = point.y - (next.y - previous.y) / 6;
+    return `${path} C${control1X.toFixed(1)},${control1Y.toFixed(1)} ${control2X.toFixed(1)},${control2Y.toFixed(1)} ${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }, "");
+}
 
 function TrendChart({
   points,
@@ -82,17 +113,15 @@ function TrendChart({
   const x = (index: number) => margin.left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
   const y = (value: number) => margin.top + ((yMax - value) / (yMax - yMin)) * plotHeight;
   const pathFor = (key: "value" | "secondary") => {
-    let started = false;
-    return points
-      .map((point, index) => {
-        const value = point[key];
-        if (value == null) return null;
-        const command = started ? "L" : "M";
-        started = true;
-        return `${command}${x(index).toFixed(1)},${y(value).toFixed(1)}`;
-      })
-      .filter(Boolean)
-      .join(" ");
+    const segments: { x: number; y: number }[][] = [];
+    points.forEach((point, index) => {
+      const value = point[key];
+      if (value == null) return;
+      const previousMissing = index === 0 || points[index - 1][key] == null;
+      if (previousMissing) segments.push([]);
+      segments[segments.length - 1].push({ x: x(index), y: y(value) });
+    });
+    return segments.map(smoothPath).join(" ");
   };
   const active = points[Math.min(activeIndex, points.length - 1)];
   const ticks = Array.from({ length: 5 }, (_, index) => yMin + ((yMax - yMin) * index) / 4);
@@ -181,11 +210,48 @@ export default function Home() {
   }, []);
 
   const months = useMemo(() => data ? [...new Set(data.records.map((record) => record.date))].sort() : [], [data]);
+  const years = useMemo(() => [...new Set(months.map((month) => month.slice(0, 4)))], [months]);
+  const cityGroups = useMemo(() => {
+    if (!data) return [];
+    const available = new Set(data.cities);
+    const assigned = new Set(["All TRREB Areas"]);
+    const groups = REGION_MEMBERS.map((group) => {
+      const cities = data.cities.filter((candidate) => {
+        const isTorontoDistrict = group.label === "Toronto" && candidate.startsWith("Toronto ");
+        const included = group.cities.includes(candidate) || isTorontoDistrict;
+        if (included) assigned.add(candidate);
+        return included;
+      });
+      return { ...group, cities };
+    }).filter((group) => group.cities.length > 0);
+    const other = [...available].filter((candidate) => !assigned.has(candidate));
+    if (other.length) groups.push({ label: "Other TRREB areas", cities: other });
+    return groups;
+  }, [data]);
   const selected = useMemo(() => {
     if (!data) return [];
-    return data.records
-      .filter((record) => record.city === city && record.propertyType === propertyType && record.date >= startDate && record.date <= endDate)
-      .sort((a, b) => a.date.localeCompare(b.date));
+    const records = data.records.filter((record) => record.city === city && record.date >= startDate && record.date <= endDate);
+    if (propertyType !== "All property types") {
+      return records.filter((record) => record.propertyType === propertyType).sort((a, b) => a.date.localeCompare(b.date));
+    }
+    const byMonth = new Map<string, MarketRecord[]>();
+    records.forEach((record) => byMonth.set(record.date, [...(byMonth.get(record.date) ?? []), record]));
+    return [...byMonth.entries()].map(([date, monthly]) => {
+      const sales = monthly.reduce((sum, record) => sum + record.sales, 0);
+      const weighted = (field: "averagePrice" | "saleToList" | "daysOnMarket") => {
+        const reported = monthly.filter((record) => record[field] != null && record.sales > 0);
+        const weight = reported.reduce((sum, record) => sum + record.sales, 0);
+        return weight ? Math.round(reported.reduce((sum, record) => sum + (record[field] ?? 0) * record.sales, 0) / weight) : null;
+      };
+      const activeValues = monthly.map((record) => record.activeListings).filter((value): value is number => value != null);
+      const activeListings = activeValues.length ? activeValues.reduce((sum, value) => sum + value, 0) : null;
+      return {
+        date, city, propertyType: "All property types", sales,
+        averagePrice: weighted("averagePrice"), medianPrice: null, activeListings,
+        monthsOfInventory: activeListings != null && sales > 0 ? Math.round((activeListings / sales) * 100) / 100 : null,
+        saleToList: weighted("saleToList"), daysOnMarket: weighted("daysOnMarket"),
+      };
+    }).sort((a, b) => a.date.localeCompare(b.date));
   }, [data, city, propertyType, startDate, endDate]);
 
   const first = selected[0];
@@ -203,6 +269,13 @@ export default function Home() {
   function updateEnd(value: string) {
     setEndDate(value);
     if (value < startDate) setStartDate(value);
+  }
+
+  function updateDatePart(boundary: "start" | "end", year: string, month: string) {
+    const valid = months.filter((date) => date.startsWith(`${year}-`));
+    const requested = `${year}-${month}-01`;
+    const value = valid.includes(requested) ? requested : boundary === "start" ? valid[0] : valid[valid.length - 1];
+    if (value) boundary === "start" ? updateStart(value) : updateEnd(value);
   }
 
   return (
@@ -237,25 +310,43 @@ export default function Home() {
         <label>
           <span>City or area</span>
           <select value={city} onChange={(event) => setCity(event.target.value)} disabled={!data}>
-            {data?.cities.map((option) => <option key={option} value={option}>{option}</option>)}
+            <option value="All TRREB Areas">All TRREB Areas</option>
+            {cityGroups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.cities.map((option) => <option key={option} value={option}>{option}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
         <label>
           <span>Property type</span>
           <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)} disabled={!data}>
+            <option value="All property types">All property types</option>
             {data?.propertyTypes.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         </label>
         <label>
-          <span>From</span>
-          <select value={startDate} onChange={(event) => updateStart(event.target.value)} disabled={!data}>
-            {months.map((month) => <option key={month} value={month}>{monthLabel(month)}</option>)}
+          <span>From year</span>
+          <select value={startDate.slice(0, 4)} onChange={(event) => updateDatePart("start", event.target.value, startDate.slice(5, 7))} disabled={!data}>
+            {years.map((year) => <option key={year} value={year}>{year}</option>)}
           </select>
         </label>
         <label>
-          <span>To</span>
-          <select value={endDate} onChange={(event) => updateEnd(event.target.value)} disabled={!data}>
-            {months.map((month) => <option key={month} value={month}>{monthLabel(month)}</option>)}
+          <span>From month</span>
+          <select value={startDate.slice(5, 7)} onChange={(event) => updateDatePart("start", startDate.slice(0, 4), event.target.value)} disabled={!data}>
+            {months.filter((month) => month.startsWith(`${startDate.slice(0, 4)}-`)).map((month) => <option key={month} value={month.slice(5, 7)}>{monthOnlyLabel(month)}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>To year</span>
+          <select value={endDate.slice(0, 4)} onChange={(event) => updateDatePart("end", event.target.value, endDate.slice(5, 7))} disabled={!data}>
+            {years.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>To month</span>
+          <select value={endDate.slice(5, 7)} onChange={(event) => updateDatePart("end", endDate.slice(0, 4), event.target.value)} disabled={!data}>
+            {months.filter((month) => month.startsWith(`${endDate.slice(0, 4)}-`)).map((month) => <option key={month} value={month.slice(5, 7)}>{monthOnlyLabel(month)}</option>)}
           </select>
         </label>
       </section>
@@ -286,9 +377,13 @@ export default function Home() {
               <Delta value={priceChange} />
             </article>
             <article className="kpi">
-              <span>Median price</span>
+              <span>{propertyType === "All property types" ? "Sale-to-list ratio" : "Median price"}</span>
+              {propertyType === "All property types" ? (
+                <strong>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</strong>
+              ) : (
               <strong>{latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice)}</strong>
-              <span className="delta neutral">{latest.saleToList == null ? "Sale-to-list unavailable" : `${latest.saleToList}% sale-to-list`}</span>
+              )}
+              <span className="delta neutral">{propertyType === "All property types" ? "Sales-weighted across property types" : latest.saleToList == null ? "Sale-to-list unavailable" : `${latest.saleToList}% sale-to-list`}</span>
             </article>
             <article className="kpi">
               <span>Active listings</span>
@@ -299,7 +394,7 @@ export default function Home() {
 
           <section className="charts-grid">
             <TrendChart points={salesPoints} title="Units sold" valueLabel="Units sold" formatValue={(value) => integerFormatter.format(value)} />
-            <TrendChart points={pricePoints} title="Home price trend" valueLabel="Average price" secondaryLabel="Median price" formatValue={compactCurrency} />
+            <TrendChart points={pricePoints} title="Home price trend" valueLabel="Average price" secondaryLabel={propertyType === "All property types" ? undefined : "Median price"} formatValue={compactCurrency} />
           </section>
 
           <section className="table-section">
@@ -308,7 +403,7 @@ export default function Home() {
                 <p className="eyebrow">Monthly detail</p>
                 <h2>Selected period data</h2>
               </div>
-              <p>Raw months of inventory = active listings ÷ monthly sales</p>
+              <p>{propertyType === "All property types" ? "Combined average price is weighted by units sold; an exact combined median is not published." : "Raw months of inventory = active listings ÷ monthly sales"}</p>
             </div>
             <div className="table-wrap">
               <table>
