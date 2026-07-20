@@ -4,15 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 
 type MarketRecord = {
   date: string;
-  year: number;
-  month: number;
   city: string;
-  scope: string;
   propertyType: string;
   sales: number;
   averagePrice: number | null;
   medianPrice: number | null;
-  newListings: number | null;
   activeListings: number | null;
   monthsOfInventory: number | null;
   saleToList: number | null;
@@ -100,6 +96,10 @@ function TrendChart({
   };
   const active = points[Math.min(activeIndex, points.length - 1)];
   const ticks = Array.from({ length: 5 }, (_, index) => yMin + ((yMax - yMin) * index) / 4);
+  const showMonthTick = (point: Point, index: number) =>
+    points.length <= 12 || index === 0 || index === points.length - 1 || point.date.slice(5, 7) === "01";
+  const tickLabel = (point: Point, index: number) =>
+    index === 0 || index === points.length - 1 ? monthLabel(point.date) : point.date.slice(0, 4);
 
   useEffect(() => setActiveIndex(Math.max(points.length - 1, 0)), [points.length, title]);
 
@@ -136,20 +136,20 @@ function TrendChart({
                 className={`hover-line ${activeIndex === index ? "active" : ""}`}
                 x1={x(index)} x2={x(index)} y1={margin.top} y2={margin.top + plotHeight}
               />
-              {point.value != null && <circle className="chart-point primary-point" cx={x(index)} cy={y(point.value)} r={activeIndex === index ? 6 : 4} />}
-              {secondaryLabel && point.secondary != null && <circle className="chart-point secondary-point" cx={x(index)} cy={y(point.secondary)} r={activeIndex === index ? 6 : 4} />}
+              {point.value != null && <circle className="chart-point primary-point" cx={x(index)} cy={y(point.value)} r={activeIndex === index ? 6 : points.length > 24 ? 2 : 4} />}
+              {secondaryLabel && point.secondary != null && <circle className="chart-point secondary-point" cx={x(index)} cy={y(point.secondary)} r={activeIndex === index ? 6 : points.length > 24 ? 2 : 4} />}
               <rect
                 className="hit-area"
-                x={x(index) - Math.max(22, plotWidth / Math.max(points.length, 1) / 2)}
+                x={x(index) - Math.max(4, plotWidth / Math.max(points.length, 1) / 2)}
                 y={margin.top}
-                width={Math.max(44, plotWidth / Math.max(points.length, 1))}
+                width={Math.max(8, plotWidth / Math.max(points.length, 1))}
                 height={plotHeight}
                 onMouseEnter={() => setActiveIndex(index)}
                 onFocus={() => setActiveIndex(index)}
                 tabIndex={0}
                 aria-label={`${monthLabel(point.date)}: ${valueLabel} ${point.value == null ? "not available" : formatValue(point.value)}${secondaryLabel && point.secondary != null ? `, ${secondaryLabel} ${formatValue(point.secondary)}` : ""}`}
               />
-              <text className="axis-label month-label" x={x(index)} y={height - 14} textAnchor="middle">{monthLabel(point.date).replace(" 2026", "")}</text>
+              {showMonthTick(point, index) && <text className="axis-label month-label" x={x(index)} y={height - 14} textAnchor="middle">{tickLabel(point, index)}</text>}
             </g>
           ))}
         </svg>
@@ -167,7 +167,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [city, setCity] = useState("All TRREB Areas");
   const [propertyType, setPropertyType] = useState("Detached");
-  const [startDate, setStartDate] = useState("2026-01-01");
+  const [startDate, setStartDate] = useState("2021-01-01");
   const [endDate, setEndDate] = useState("2026-06-01");
 
   useEffect(() => {
@@ -224,7 +224,7 @@ export default function Home() {
         <div>
           <p className="eyebrow">Interactive market dashboard</p>
           <h1>See where sales and prices are moving.</h1>
-          <p className="hero-copy">Compare monthly units sold and home prices across 76 TRREB geographies and nine property types.</p>
+          <p className="hero-copy">Compare monthly units sold and home prices across TRREB geographies and nine property types from 2021 onward.</p>
         </div>
         <div className="coverage-note">
           <span>Updated through</span>
@@ -339,7 +339,7 @@ export default function Home() {
       {data && selected.length === 0 && <div className="status-message">No reported transactions match this selection.</div>}
 
       <footer>
-        <p>Property-type dashboard coverage: January–June 2026. The linked workbook includes detached history through June 2026.</p>
+        <p>Property-type dashboard coverage: January 2021–June 2026, compiled from official monthly TRREB Market Watch reports.</p>
         <a href="https://public.trreb.ca/market-data/market-watch/" target="_blank" rel="noreferrer">View official TRREB Market Watch source</a>
       </footer>
     </main>

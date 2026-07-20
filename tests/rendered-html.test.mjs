@@ -31,11 +31,26 @@ test("server-renders the housing dashboard shell and metadata", async () => {
 test("dashboard data includes complete monthly city and property-type coverage", async () => {
   const text = await readFile(new URL("../public/data/market-data.json", import.meta.url), "utf8");
   const data = JSON.parse(text);
-  assert.equal(data.cities.length, 76);
+  assert.ok(data.cities.length >= 76);
   assert.equal(data.propertyTypes.length, 9);
-  assert.equal(data.records.length, 76 * 9 * 6);
-  assert.equal(data.metadata.periodStart, "2026-01-01");
+  assert.equal(new Set(data.records.map((row) => row.date)).size, 66);
+  assert.equal(data.metadata.periodStart, "2021-01-01");
   assert.equal(data.metadata.periodEnd, "2026-06-01");
+
+  const allTrrebCoverage = new Set(
+    data.records
+      .filter((row) => row.city === "All TRREB Areas")
+      .map((row) => `${row.date}:${row.propertyType}`),
+  );
+  assert.equal(allTrrebCoverage.size, 66 * 9);
+
+  const january2021Detached = data.records.find(
+    (row) => row.date === "2021-01-01" && row.city === "All TRREB Areas" && row.propertyType === "Detached",
+  );
+  assert.deepEqual(
+    { sales: january2021Detached.sales, averagePrice: january2021Detached.averagePrice },
+    { sales: 2766, averagePrice: 1359915 },
+  );
 
   const juneDetached = data.records.find(
     (row) => row.date === "2026-06-01" && row.city === "All TRREB Areas" && row.propertyType === "Detached",
