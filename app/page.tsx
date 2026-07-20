@@ -204,10 +204,21 @@ function TrendChart({
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [city, setCity] = useState("All TRREB Areas");
   const [propertyType, setPropertyType] = useState("Detached");
   const [startDate, setStartDate] = useState("2021-01-01");
   const [endDate, setEndDate] = useState("2026-06-01");
+  const isGitHubPages = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("housing-dashboard-theme");
+    const preferredTheme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    setTheme(preferredTheme);
+    document.documentElement.dataset.theme = preferredTheme;
+  }, []);
 
   useEffect(() => {
     fetch("./data/market-data.json")
@@ -309,6 +320,13 @@ export default function Home() {
     if (value) boundary === "start" ? updateStart(value) : updateEnd(value);
   }
 
+  function toggleTheme() {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    window.localStorage.setItem("housing-dashboard-theme", nextTheme);
+  }
+
   return (
     <main>
       <header className="site-header">
@@ -319,9 +337,17 @@ export default function Home() {
             <p className="brand-subtitle">TRREB monthly market intelligence</p>
           </div>
         </div>
-        <a className="dataset-link" href="./data/TRREB_Detached_Dataset_through_2026-06.xlsx" download>
-          Download linked Excel data
-        </a>
+        <div className="header-actions">
+          <button className="theme-toggle" type="button" onClick={toggleTheme} aria-pressed={theme === "dark"} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} background`}>
+            <span className="toggle-track" aria-hidden="true"><span /></span>
+            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+          </button>
+          {!isGitHubPages && (
+            <a className="dataset-link" href="./data/TRREB_Detached_Dataset_through_2026-06.xlsx" download>
+              Download linked Excel data
+            </a>
+          )}
+        </div>
       </header>
 
       <section className="hero">

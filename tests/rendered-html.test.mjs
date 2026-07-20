@@ -73,3 +73,14 @@ test("dashboard source includes the responsive automatic market summary", async 
   assert.match(source, /highest sales month/i);
   assert.match(source, /raw months of inventory/);
 });
+
+test("dashboard includes a persistent light and dark theme switch and hides downloads on GitHub Pages", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /housing-dashboard-theme/);
+  assert.match(source, /hostname\.endsWith\("github\.io"\)/);
+  assert.match(source, /className="theme-toggle"/);
+  assert.match(source, /!isGitHubPages/);
+  assert.match(styles, /html\[data-theme="dark"\]/);
+  assert.match(styles, /color-scheme: dark/);
+});
