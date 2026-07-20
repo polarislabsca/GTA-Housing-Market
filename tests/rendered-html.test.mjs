@@ -84,3 +84,12 @@ test("dashboard includes a persistent light and dark theme switch and hides down
   assert.match(styles, /html\[data-theme="dark"\]/);
   assert.match(styles, /color-scheme: dark/);
 });
+
+test("monthly detail is collapsed by default and can be expanded accessibly", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /showMonthlyDetail, setShowMonthlyDetail/);
+  assert.match(source, /aria-expanded=\{showMonthlyDetail\}/);
+  assert.match(source, /aria-controls="monthly-detail-table"/);
+  assert.match(source, /Show monthly detail/);
+  assert.match(source, /showMonthlyDetail &&/);
+});

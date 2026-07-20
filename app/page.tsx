@@ -205,6 +205,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [showMonthlyDetail, setShowMonthlyDetail] = useState(false);
   const [city, setCity] = useState("All TRREB Areas");
   const [propertyType, setPropertyType] = useState("Detached");
   const [startDate, setStartDate] = useState("2021-01-01");
@@ -470,31 +471,46 @@ export default function Home() {
               <div>
                 <p className="eyebrow">Monthly detail</p>
                 <h2>Selected period data</h2>
+                <p className="table-summary">{selected.length} monthly records available</p>
               </div>
-              <p>{propertyType === "All property types" ? "Combined average price is weighted by units sold; an exact combined median is not published." : "Raw months of inventory = active listings ÷ monthly sales"}</p>
+              <button
+                className="detail-toggle"
+                type="button"
+                aria-expanded={showMonthlyDetail}
+                aria-controls="monthly-detail-table"
+                onClick={() => setShowMonthlyDetail((visible) => !visible)}
+              >
+                {showMonthlyDetail ? "Hide monthly detail" : "Show monthly detail"}
+                <span aria-hidden="true">{showMonthlyDetail ? "−" : "+"}</span>
+              </button>
             </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Month</th><th>Units sold</th><th>Average price</th><th>Median price</th><th>Active listings</th><th>Raw MOS</th><th>Avg. LDOM</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.map((record) => (
-                    <tr key={record.date}>
-                      <td>{monthLabel(record.date)}</td>
-                      <td>{integerFormatter.format(record.sales)}</td>
-                      <td>{record.averagePrice == null ? "—" : currencyFormatter.format(record.averagePrice)}</td>
-                      <td>{record.medianPrice == null ? "—" : currencyFormatter.format(record.medianPrice)}</td>
-                      <td>{record.activeListings == null ? "—" : integerFormatter.format(record.activeListings)}</td>
-                      <td>{record.monthsOfInventory == null ? "—" : record.monthsOfInventory.toFixed(2)}</td>
-                      <td>{record.daysOnMarket == null ? "—" : integerFormatter.format(record.daysOnMarket)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {showMonthlyDetail && (
+              <div id="monthly-detail-table" className="monthly-detail-content">
+                <p className="table-note">{propertyType === "All property types" ? "Combined average price is weighted by units sold; an exact combined median is not published." : "Raw months of inventory = active listings ÷ monthly sales"}</p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Month</th><th>Units sold</th><th>Average price</th><th>Median price</th><th>Active listings</th><th>Raw MOS</th><th>Avg. LDOM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selected.map((record) => (
+                        <tr key={record.date}>
+                          <td>{monthLabel(record.date)}</td>
+                          <td>{integerFormatter.format(record.sales)}</td>
+                          <td>{record.averagePrice == null ? "—" : currencyFormatter.format(record.averagePrice)}</td>
+                          <td>{record.medianPrice == null ? "—" : currencyFormatter.format(record.medianPrice)}</td>
+                          <td>{record.activeListings == null ? "—" : integerFormatter.format(record.activeListings)}</td>
+                          <td>{record.monthsOfInventory == null ? "—" : record.monthsOfInventory.toFixed(2)}</td>
+                          <td>{record.daysOnMarket == null ? "—" : integerFormatter.format(record.daysOnMarket)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </section>
         </>
       )}
