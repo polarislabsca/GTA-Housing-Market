@@ -210,7 +210,7 @@ export default function Home() {
   const [endDate, setEndDate] = useState("2026-06-01");
 
   useEffect(() => {
-    fetch("/data/market-data.json")
+    fetch("./data/market-data.json")
       .then((response) => {
         if (!response.ok) throw new Error("The market data could not be loaded.");
         return response.json();
@@ -319,7 +319,7 @@ export default function Home() {
             <p className="brand-subtitle">TRREB monthly market intelligence</p>
           </div>
         </div>
-        <a className="dataset-link" href="/data/TRREB_Detached_Dataset_through_2026-06.xlsx" download>
+        <a className="dataset-link" href="./data/TRREB_Detached_Dataset_through_2026-06.xlsx" download>
           Download linked Excel data
         </a>
       </header>
