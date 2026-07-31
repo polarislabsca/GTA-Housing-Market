@@ -77,7 +77,8 @@ function Delta({ value, suffix = "vs. period start" }: { value: number | null; s
   return <span className={`delta ${direction}`}>{value >= 0 ? "+" : ""}{value.toFixed(1)}% {suffix}</span>;
 }
 
-type Point = { date: string; value: number | null; secondary?: number | null };
+type PriceMode = "average" | "median" | "both";
+type VolumeMode = "sales" | "inventory";
 
 function smoothPath(points: { x: number; y: number }[]) {
   if (points.length === 0) return "";
@@ -95,107 +96,136 @@ function smoothPath(points: { x: number; y: number }[]) {
   }, "");
 }
 
-function TrendChart({
-  points,
-  title,
-  valueLabel,
-  secondaryLabel,
-  formatValue,
+function CombinedMarketChart({
+  records,
+  priceMode,
+  volumeMode,
+  onPriceModeChange,
+  onVolumeModeChange,
+  medianAvailable,
 }: {
-  points: Point[];
-  title: string;
-  valueLabel: string;
-  secondaryLabel?: string;
-  formatValue: (value: number) => string;
+  records: MarketRecord[];
+  priceMode: PriceMode;
+  volumeMode: VolumeMode;
+  onPriceModeChange: (mode: PriceMode) => void;
+  onVolumeModeChange: (mode: VolumeMode) => void;
+  medianAvailable: boolean;
 }) {
-  const [activeIndex, setActiveIndex] = useState(points.length - 1);
-  const width = 760;
-  const height = 310;
-  const margin = { top: 24, right: 26, bottom: 42, left: 74 };
+  const [activeIndex, setActiveIndex] = useState(Math.max(records.length - 1, 0));
+  const width = 1180;
+  const height = 390;
+  const margin = { top: 28, right: 88, bottom: 48, left: 72 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
-  const allValues = points.flatMap((point) => [point.value, point.secondary]).filter((value): value is number => value != null);
-  const maxValue = Math.max(...allValues, 1);
-  const minValue = Math.min(...allValues, 0);
-  const spread = Math.max(maxValue - minValue, maxValue * 0.1, 1);
-  const yMin = Math.max(0, minValue - spread * 0.15);
-  const yMax = maxValue + spread * 0.15;
-  const x = (index: number) => margin.left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
-  const y = (value: number) => margin.top + ((yMax - value) / (yMax - yMin)) * plotHeight;
-  const pathFor = (key: "value" | "secondary") => {
+  const volumeValue = (record: MarketRecord) => volumeMode === "sales" ? record.sales : record.activeListings;
+  const volumeValues = records.map(volumeValue).filter((value): value is number => value != null);
+  const priceValues = records.flatMap((record) => {
+    if (priceMode === "average") return [record.averagePrice];
+    if (priceMode === "median") return [record.medianPrice];
+    return [record.averagePrice, record.medianPrice];
+  }).filter((value): value is number => value != null);
+  const volumeMax = Math.max(...volumeValues, 1) * 1.12;
+  const priceMinRaw = priceValues.length ? Math.min(...priceValues) : 0;
+  const priceMaxRaw = priceValues.length ? Math.max(...priceValues) : 1;
+  const priceSpread = Math.max(priceMaxRaw - priceMinRaw, priceMaxRaw * 0.08, 1);
+  const priceMin = Math.max(0, priceMinRaw - priceSpread * 0.18);
+  const priceMax = priceMaxRaw + priceSpread * 0.18;
+  const x = (index: number) => margin.left + (records.length === 1 ? plotWidth / 2 : (index / (records.length - 1)) * plotWidth);
+  const volumeY = (value: number) => margin.top + (1 - value / volumeMax) * plotHeight;
+  const priceY = (value: number) => margin.top + ((priceMax - value) / (priceMax - priceMin)) * plotHeight;
+  const barWidth = Math.max(5, Math.min(30, (plotWidth / Math.max(records.length, 1)) * 0.58));
+  const linePath = (key: "averagePrice" | "medianPrice") => {
     const segments: { x: number; y: number }[][] = [];
-    points.forEach((point, index) => {
-      const value = point[key];
+    records.forEach((record, index) => {
+      const value = record[key];
       if (value == null) return;
-      const previousMissing = index === 0 || points[index - 1][key] == null;
-      if (previousMissing) segments.push([]);
-      segments[segments.length - 1].push({ x: x(index), y: y(value) });
+      if (index === 0 || records[index - 1][key] == null) segments.push([]);
+      segments[segments.length - 1].push({ x: x(index), y: priceY(value) });
     });
     return segments.map(smoothPath).join(" ");
   };
-  const active = points[Math.min(activeIndex, points.length - 1)];
-  const ticks = Array.from({ length: 5 }, (_, index) => yMin + ((yMax - yMin) * index) / 4);
-  const showMonthTick = (point: Point, index: number) =>
-    points.length <= 12 || index === 0 || index === points.length - 1 || point.date.slice(5, 7) === "01";
-  const tickLabel = (point: Point, index: number) =>
-    index === 0 || index === points.length - 1 ? monthLabel(point.date) : point.date.slice(0, 4);
+  const ticks = Array.from({ length: 5 }, (_, index) => index / 4);
+  const active = records[Math.min(activeIndex, Math.max(records.length - 1, 0))];
+  const volumeLabel = volumeMode === "sales" ? "Units sold" : "Active listings";
+  const showAverage = priceMode === "average" || priceMode === "both";
+  const showMedian = priceMode === "median" || priceMode === "both";
+  const showMonthTick = (record: MarketRecord, index: number) =>
+    records.length <= 12 || index === 0 || index === records.length - 1 || record.date.slice(5, 7) === "01";
 
-  useEffect(() => setActiveIndex(Math.max(points.length - 1, 0)), [points.length, title]);
+  useEffect(() => setActiveIndex(Math.max(records.length - 1, 0)), [records.length, priceMode, volumeMode]);
 
   return (
-    <section className="chart-panel" aria-labelledby={`${title.replaceAll(" ", "-")}-title`}>
-      <div className="chart-heading">
+    <section className="combined-chart" aria-labelledby="market-performance-title">
+      <div className="combined-chart-heading">
         <div>
-          <p className="eyebrow">Monthly movement</p>
-          <h2 id={`${title.replaceAll(" ", "-")}-title`}>{title}</h2>
+          <p className="eyebrow">Selected period</p>
+          <h2 id="market-performance-title">Market performance</h2>
+          <p className="chart-description">Switch the volume bars and price lines without changing your market filters.</p>
         </div>
         {active && (
-          <div className="chart-focus" aria-live="polite">
+          <div className="combined-focus" aria-live="polite">
             <span>{monthLabel(active.date)}</span>
-            <strong>{active.value == null ? "—" : formatValue(active.value)}</strong>
-            {secondaryLabel && active.secondary != null && <em>{secondaryLabel}: {formatValue(active.secondary)}</em>}
+            <strong>{volumeLabel}: {volumeValue(active) == null ? "—" : integerFormatter.format(volumeValue(active) ?? 0)}</strong>
+            {showAverage && <em>Average: {active.averagePrice == null ? "—" : compactCurrency(active.averagePrice)}</em>}
+            {showMedian && <em>Median: {active.medianPrice == null ? "—" : compactCurrency(active.medianPrice)}</em>}
           </div>
         )}
       </div>
-      <div className="chart-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title}. ${valueLabel}${secondaryLabel ? ` and ${secondaryLabel}` : ""} by month.`}>
-          <title>{title}</title>
-          <desc>Interactive monthly trend for the selected city, property type, and date range.</desc>
-          {ticks.map((tick) => (
-            <g key={tick}>
-              <line className="grid-line" x1={margin.left} x2={width - margin.right} y1={y(tick)} y2={y(tick)} />
-              <text className="axis-label" x={margin.left - 12} y={y(tick) + 4} textAnchor="end">{formatValue(tick)}</text>
+
+      <div className="metric-switches" aria-label="Chart measures">
+        <fieldset>
+          <legend>Volume bars</legend>
+          <div className="segmented-control">
+            <button type="button" className={volumeMode === "sales" ? "active" : ""} aria-pressed={volumeMode === "sales"} onClick={() => onVolumeModeChange("sales")}>Units sold</button>
+            <button type="button" className={volumeMode === "inventory" ? "active" : ""} aria-pressed={volumeMode === "inventory"} onClick={() => onVolumeModeChange("inventory")}>Active listings</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Price lines</legend>
+          <div className="segmented-control">
+            <button type="button" className={priceMode === "average" ? "active" : ""} aria-pressed={priceMode === "average"} onClick={() => onPriceModeChange("average")}>Average</button>
+            <button type="button" disabled={!medianAvailable} className={priceMode === "median" ? "active" : ""} aria-pressed={priceMode === "median"} onClick={() => onPriceModeChange("median")}>Median</button>
+            <button type="button" disabled={!medianAvailable} className={priceMode === "both" ? "active" : ""} aria-pressed={priceMode === "both"} onClick={() => onPriceModeChange("both")}>Both</button>
+          </div>
+          {!medianAvailable && <small>Combined median is not published for all property types.</small>}
+        </fieldset>
+      </div>
+
+      <div className="combined-chart-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${volumeLabel} with ${priceMode === "both" ? "average and median prices" : `${priceMode} price`} by month.`}>
+          <title>Market performance</title>
+          <desc>Monthly volume bars use the left axis. Price lines use the right axis.</desc>
+          {ticks.map((tick) => {
+            const lineY = margin.top + (1 - tick) * plotHeight;
+            return (
+              <g key={tick}>
+                <line className="grid-line" x1={margin.left} x2={width - margin.right} y1={lineY} y2={lineY} />
+                <text className="axis-label" x={margin.left - 12} y={lineY + 4} textAnchor="end">{integerFormatter.format(volumeMax * tick)}</text>
+                <text className="axis-label" x={width - margin.right + 12} y={lineY + 4}>{compactCurrency(priceMin + (priceMax - priceMin) * tick)}</text>
+              </g>
+            );
+          })}
+          {records.map((record, index) => {
+            const value = volumeValue(record);
+            return value == null ? null : <rect key={`bar-${record.date}`} className="volume-bar" x={x(index) - barWidth / 2} y={volumeY(value)} width={barWidth} height={margin.top + plotHeight - volumeY(value)} rx="3" />;
+          })}
+          {showAverage && <path className="price-series average-series" d={linePath("averagePrice")} />}
+          {showMedian && <path className="price-series median-series" d={linePath("medianPrice")} />}
+          {records.map((record, index) => (
+            <g key={record.date}>
+              <line className={`hover-line ${activeIndex === index ? "active" : ""}`} x1={x(index)} x2={x(index)} y1={margin.top} y2={margin.top + plotHeight} />
+              <rect className="hit-area" x={x(index) - Math.max(5, plotWidth / Math.max(records.length, 1) / 2)} y={margin.top} width={Math.max(10, plotWidth / Math.max(records.length, 1))} height={plotHeight} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} tabIndex={0} aria-label={`${monthLabel(record.date)}. ${volumeLabel}: ${volumeValue(record) == null ? "not available" : integerFormatter.format(volumeValue(record) ?? 0)}. Average price: ${record.averagePrice == null ? "not available" : currencyFormatter.format(record.averagePrice)}. Median price: ${record.medianPrice == null ? "not available" : currencyFormatter.format(record.medianPrice)}.`} />
+              {showMonthTick(record, index) && <text className="axis-label month-label" x={x(index)} y={height - 14} textAnchor="middle">{index === 0 || index === records.length - 1 ? monthLabel(record.date) : record.date.slice(0, 4)}</text>}
             </g>
           ))}
-          <path className="trend-line primary-line" d={pathFor("value")} />
-          {secondaryLabel && <path className="trend-line secondary-line" d={pathFor("secondary")} />}
-          {points.map((point, index) => (
-            <g key={point.date}>
-              <line
-                className={`hover-line ${activeIndex === index ? "active" : ""}`}
-                x1={x(index)} x2={x(index)} y1={margin.top} y2={margin.top + plotHeight}
-              />
-              {point.value != null && <circle className="chart-point primary-point" cx={x(index)} cy={y(point.value)} r={activeIndex === index ? 6 : points.length > 24 ? 2 : 4} />}
-              {secondaryLabel && point.secondary != null && <circle className="chart-point secondary-point" cx={x(index)} cy={y(point.secondary)} r={activeIndex === index ? 6 : points.length > 24 ? 2 : 4} />}
-              <rect
-                className="hit-area"
-                x={x(index) - Math.max(4, plotWidth / Math.max(points.length, 1) / 2)}
-                y={margin.top}
-                width={Math.max(8, plotWidth / Math.max(points.length, 1))}
-                height={plotHeight}
-                onMouseEnter={() => setActiveIndex(index)}
-                onFocus={() => setActiveIndex(index)}
-                tabIndex={0}
-                aria-label={`${monthLabel(point.date)}: ${valueLabel} ${point.value == null ? "not available" : formatValue(point.value)}${secondaryLabel && point.secondary != null ? `, ${secondaryLabel} ${formatValue(point.secondary)}` : ""}`}
-              />
-              {showMonthTick(point, index) && <text className="axis-label month-label" x={x(index)} y={height - 14} textAnchor="middle">{tickLabel(point, index)}</text>}
-            </g>
-          ))}
+          <text className="axis-title" x={margin.left} y={14}>{volumeLabel}</text>
+          <text className="axis-title" x={width - margin.right} y={14} textAnchor="end">Price (CAD)</text>
         </svg>
       </div>
-      <div className="legend" aria-hidden="true">
-        <span><i className="legend-line primary" />{valueLabel}</span>
-        {secondaryLabel && <span><i className="legend-line secondary" />{secondaryLabel}</span>}
+      <div className="combined-legend" aria-hidden="true">
+        <span><i className="bar-swatch" />{volumeLabel}</span>
+        {showAverage && <span><i className="average-swatch" />Average price</span>}
+        {showMedian && <span><i className="median-swatch" />Median price</span>}
       </div>
     </section>
   );
@@ -206,6 +236,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [showMonthlyDetail, setShowMonthlyDetail] = useState(false);
+  const [priceMode, setPriceMode] = useState<PriceMode>("average");
+  const [volumeMode, setVolumeMode] = useState<VolumeMode>("sales");
   const [city, setCity] = useState("All TRREB Areas");
   const [propertyType, setPropertyType] = useState("Detached");
   const [startDate, setStartDate] = useState("2021-01-01");
@@ -279,30 +311,52 @@ export default function Home() {
   const first = selected[0];
   const latest = selected[selected.length - 1];
   const salesChange = percentChange(latest?.sales ?? null, first?.sales ?? null);
+  const inventoryChange = percentChange(latest?.activeListings ?? null, first?.activeListings ?? null);
   const priceChange = percentChange(latest?.averagePrice ?? null, first?.averagePrice ?? null);
-  const salesPoints = selected.map((record) => ({ date: record.date, value: record.sales }));
-  const pricePoints = selected.map((record) => ({ date: record.date, value: record.averagePrice, secondary: record.medianPrice }));
+  const medianChange = percentChange(latest?.medianPrice ?? null, first?.medianPrice ?? null);
+  const volumeChange = volumeMode === "sales" ? salesChange : inventoryChange;
+  const volumeLabel = volumeMode === "sales" ? "Units sold" : "Active listings";
+  const latestVolume = volumeMode === "sales" ? latest?.sales ?? null : latest?.activeListings ?? null;
+  const medianAvailable = propertyType !== "All property types" && selected.some((record) => record.medianPrice != null);
+
+  useEffect(() => {
+    if (!medianAvailable && priceMode !== "average") setPriceMode("average");
+  }, [medianAvailable, priceMode]);
+
   const marketSummary = useMemo(() => {
     if (!first || !latest) return [];
-    const summary = [
-      `${changePhrase(salesChange, "Monthly sales")} The latest month recorded ${integerFormatter.format(latest.sales)} sales.`,
-      `${changePhrase(priceChange, propertyType === "All property types" ? "The sales-weighted average price" : "The average price")} The latest average was ${latest.averagePrice == null ? "not reported" : currencyFormatter.format(latest.averagePrice)}.`,
-    ];
+    const summary: string[] = [];
+    const latestVolumeText = latestVolume == null ? "not reported" : integerFormatter.format(latestVolume);
+    summary.push(`${changePhrase(volumeChange, volumeLabel)} The latest month recorded ${latestVolumeText.toLowerCase()} ${volumeLabel.toLowerCase()}.`);
+    if (priceMode === "average" || priceMode === "both") {
+      summary.push(`${changePhrase(priceChange, propertyType === "All property types" ? "The sales-weighted average price" : "The average price")} The latest average was ${latest.averagePrice == null ? "not reported" : currencyFormatter.format(latest.averagePrice)}.`);
+    }
+    if (priceMode === "median" || priceMode === "both") {
+      summary.push(`${changePhrase(medianChange, "The median price")} The latest median was ${latest.medianPrice == null ? "not reported" : currencyFormatter.format(latest.medianPrice)}.`);
+    }
     if (selected.length >= 6) {
-      const recent = average(selected.slice(-3).map((record) => record.sales));
-      const previous = average(selected.slice(-6, -3).map((record) => record.sales));
+      const values = selected.map((record) => volumeMode === "sales" ? record.sales : record.activeListings).filter((value): value is number => value != null);
+      const recent = average(values.slice(-3));
+      const previous = average(values.slice(-6, -3));
       const momentum = percentChange(recent, previous);
       if (momentum != null) {
-        summary.push(`Recent sales momentum was ${Math.abs(momentum) < 1 ? "stable" : momentum > 0 ? "positive" : "negative"}: the latest three-month average was ${Math.abs(momentum).toFixed(1)}% ${momentum >= 0 ? "above" : "below"} the preceding three months.`);
+        summary.push(`Recent ${volumeLabel.toLowerCase()} momentum was ${Math.abs(momentum) < 1 ? "stable" : momentum > 0 ? "positive" : "negative"}: the latest three-month average was ${Math.abs(momentum).toFixed(1)}% ${momentum >= 0 ? "above" : "below"} the preceding three months.`);
       }
     }
-    const peakSales = selected.reduce((peak, record) => record.sales > peak.sales ? record : peak, selected[0]);
+    const reportedVolume = selected.filter((record) => (volumeMode === "sales" ? record.sales : record.activeListings) != null);
+    const peakVolume = reportedVolume.reduce((peak, record) => ((volumeMode === "sales" ? record.sales : record.activeListings ?? 0) > (volumeMode === "sales" ? peak.sales : peak.activeListings ?? 0) ? record : peak), reportedVolume[0] ?? selected[0]);
     const supply = latest.activeListings == null ? "Active listings were not reported" : `There were ${integerFormatter.format(latest.activeListings)} active listings`;
     const inventory = latest.monthsOfInventory == null ? "" : `, equal to ${latest.monthsOfInventory.toFixed(2)} raw months of inventory`;
     const pace = latest.daysOnMarket == null ? "" : `, while the average listing took ${integerFormatter.format(latest.daysOnMarket)} days to sell`;
-    summary.push(`${supply}${inventory}${pace}. The highest sales month in the selected period was ${monthLabel(peakSales.date)}, with ${integerFormatter.format(peakSales.sales)} sales.`);
+    const peakValue = volumeMode === "sales" ? peakVolume.sales : peakVolume.activeListings;
+    summary.push(`${supply}${inventory}${pace}. The highest ${volumeLabel.toLowerCase()} month in the selected period was ${monthLabel(peakVolume.date)}${peakValue == null ? "." : `, at ${integerFormatter.format(peakValue)}.`}`);
     return summary;
-  }, [first, latest, priceChange, propertyType, salesChange, selected]);
+  }, [first, latest, latestVolume, medianChange, priceChange, priceMode, propertyType, selected, volumeChange, volumeLabel, volumeMode]);
+
+  const marketHeadline = !latest
+    ? "Read demand, supply and price together."
+    : `${salesChange == null ? "Demand" : salesChange > 1 ? "Demand improved" : salesChange < -1 ? "Demand cooled" : "Demand held steady"}${inventoryChange == null ? "." : inventoryChange > 1 ? " as available supply expanded." : inventoryChange < -1 ? " as available supply moved lower." : " while available supply held steady."}`;
+  const inventoryScaleWidth = latest?.monthsOfInventory == null ? "0%" : `${Math.min((latest.monthsOfInventory / 6) * 100, 100)}%`;
 
   function updateStart(value: string) {
     setStartDate(value);
@@ -353,9 +407,9 @@ export default function Home() {
 
       <section className="hero">
         <div>
-          <p className="eyebrow">Interactive market dashboard</p>
-          <h1>See where sales and prices are moving.</h1>
-          <p className="hero-copy">Compare monthly units sold and home prices across TRREB geographies and nine property types from 2021 onward.</p>
+          <p className="eyebrow">Monthly market briefing</p>
+          <h1>{marketHeadline}</h1>
+          <p className="hero-copy">A diagnostic view of how sales, listings, and prices are moving together across the selected market and period.</p>
         </div>
         <div className="coverage-note">
           <span>Updated through</span>
@@ -423,48 +477,70 @@ export default function Home() {
             <p className="summary-context">Latest month in range: <strong>{monthLabel(latest.date)}</strong></p>
           </section>
 
-          <section className="market-summary" aria-labelledby="market-summary-title">
-            <div>
-              <p className="eyebrow">Automatic analysis</p>
-              <h2 id="market-summary-title">Market summary</h2>
-              <p>{city}<br />{propertyType}<br />{monthLabel(startDate)}–{monthLabel(endDate)}</p>
-            </div>
-            <ul>
-              {marketSummary.map((statement) => <li key={statement}>{statement}</li>)}
-            </ul>
-          </section>
-
           <section className="kpi-grid" aria-label="Latest selected metrics">
             <article className="kpi">
-              <span>Units sold</span>
-              <strong>{integerFormatter.format(latest.sales)}</strong>
-              <Delta value={salesChange} />
+              <span>{volumeLabel}</span>
+              <strong>{latestVolume == null ? "—" : integerFormatter.format(latestVolume)}</strong>
+              <Delta value={volumeChange} />
             </article>
             <article className="kpi">
-              <span>Average price</span>
-              <strong>{latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)}</strong>
-              <Delta value={priceChange} />
-            </article>
-            <article className="kpi">
-              <span>{propertyType === "All property types" ? "Sale-to-list ratio" : "Median price"}</span>
-              {propertyType === "All property types" ? (
-                <strong>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</strong>
+              <span>{priceMode === "average" ? "Average price" : priceMode === "median" ? "Median price" : "Average and median price"}</span>
+              {priceMode === "both" ? (
+                <div className="dual-price-value">
+                  <strong>{latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)}</strong>
+                  <strong>{latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice)}</strong>
+                  <small>Average · Median</small>
+                </div>
               ) : (
-              <strong>{latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice)}</strong>
+                <strong>{priceMode === "average" ? (latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)) : (latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice))}</strong>
               )}
-              <span className="delta neutral">{propertyType === "All property types" ? "Sales-weighted across property types" : latest.saleToList == null ? "Sale-to-list unavailable" : `${latest.saleToList}% sale-to-list`}</span>
+              {priceMode !== "both" && <Delta value={priceMode === "average" ? priceChange : medianChange} />}
             </article>
             <article className="kpi">
-              <span>Active listings</span>
-              <strong>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</strong>
-              <span className="delta neutral">{latest.monthsOfInventory == null ? "Inventory ratio unavailable" : `${latest.monthsOfInventory.toFixed(2)} raw months of inventory`}</span>
+              <span>Sale-to-list ratio</span>
+              <strong>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</strong>
+              <span className="delta neutral">{propertyType === "All property types" ? "Sales-weighted across property types" : "Latest reported month"}</span>
+            </article>
+            <article className="kpi">
+              <span>Months of inventory</span>
+              <strong>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</strong>
+              <span className="delta neutral">Active listings ÷ monthly sales</span>
             </article>
           </section>
 
-          <section className="charts-grid">
-            <TrendChart points={salesPoints} title="Units sold" valueLabel="Units sold" formatValue={(value) => integerFormatter.format(value)} />
-            <TrendChart points={pricePoints} title="Home price trend" valueLabel="Average price" secondaryLabel={propertyType === "All property types" ? undefined : "Median price"} formatValue={compactCurrency} />
-          </section>
+          <div className="market-workspace">
+            <CombinedMarketChart
+              records={selected}
+              priceMode={priceMode}
+              volumeMode={volumeMode}
+              onPriceModeChange={setPriceMode}
+              onVolumeModeChange={setVolumeMode}
+              medianAvailable={medianAvailable}
+            />
+
+            <aside className="diagnostic-column" aria-label="Market balance and automatic analysis">
+              <section className="market-balance-card" aria-labelledby="market-balance-title">
+                <p className="eyebrow">Supply vs. demand</p>
+                <h2 id="market-balance-title">Market balance</h2>
+                <div className="inventory-meter" aria-label={latest.monthsOfInventory == null ? "Months of inventory unavailable" : `${latest.monthsOfInventory.toFixed(2)} months of inventory on a display scale from zero to six or more months`}>
+                  <span style={{ width: inventoryScaleWidth }} />
+                </div>
+                <div className="inventory-scale-labels"><span>0 months</span><span>3</span><span>6+</span></div>
+                <dl>
+                  <div><dt>Active listings</dt><dd>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</dd></div>
+                  <div><dt>Months of inventory</dt><dd>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</dd></div>
+                  <div><dt>Days on market</dt><dd>{latest.daysOnMarket == null ? "—" : integerFormatter.format(latest.daysOnMarket)}</dd></div>
+                  <div><dt>Sale-to-list ratio</dt><dd>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</dd></div>
+                </dl>
+              </section>
+
+              <section className="market-briefing-card" aria-labelledby="market-briefing-title">
+                <p className="eyebrow">Automatic analysis</p>
+                <h2 id="market-briefing-title">Signals to watch</h2>
+                {marketSummary.slice(0, 3).map((statement) => <p key={statement}>{statement}</p>)}
+              </section>
+            </aside>
+          </div>
 
           <section className="table-section">
             <div className="section-heading">

@@ -20,7 +20,7 @@ test("server-renders the housing dashboard shell and metadata", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Toronto Housing Market Dashboard<\/title>/i);
-  assert.match(html, /See where sales and prices are moving\./);
+  assert.match(html, /Read demand, supply and price together\./);
   assert.match(html, /Download linked Excel data/);
   assert.match(html, /City or area/);
   assert.match(html, /Property type/);
@@ -69,9 +69,32 @@ test("dashboard data includes complete monthly city and property-type coverage",
 test("dashboard source includes the responsive automatic market summary", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /Automatic analysis/);
-  assert.match(source, /Recent sales momentum/);
-  assert.match(source, /highest sales month/i);
+  assert.match(source, /Recent \$\{volumeLabel\.toLowerCase\(\)\} momentum/);
+  assert.match(source, /highest \$\{volumeLabel\.toLowerCase\(\)\} month/i);
   assert.match(source, /raw months of inventory/);
+});
+
+test("market chart can switch volume and price measures independently", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /type PriceMode = "average" \| "median" \| "both"/);
+  assert.match(source, /type VolumeMode = "sales" \| "inventory"/);
+  assert.match(source, />Units sold<\/button>/);
+  assert.match(source, />Active listings<\/button>/);
+  assert.match(source, />Average<\/button>/);
+  assert.match(source, />Median<\/button>/);
+  assert.match(source, />Both<\/button>/);
+  assert.match(source, /Combined median is not published for all property types/);
+  assert.doesNotMatch(source, /<circle/);
+});
+
+test("market balance briefing uses reported supply and demand measures", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /Supply vs\. demand/);
+  assert.match(source, /Active listings/);
+  assert.match(source, /Months of inventory/);
+  assert.match(source, /Days on market/);
+  assert.match(source, /Sale-to-list ratio/);
+  assert.match(source, /Signals to watch/);
 });
 
 test("dashboard includes a persistent light and dark theme switch and hides downloads on GitHub Pages", async () => {
@@ -96,8 +119,8 @@ test("monthly detail is collapsed by default and can be expanded accessibly", as
 
 test("selection controls retain high contrast in dark mode", async () => {
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(styles, /--control-surface: #ffffff/);
-  assert.match(styles, /--control-text: #0c2540/);
-  assert.match(styles, /-webkit-text-fill-color: var\(--control-text\)/);
+  assert.match(styles, /--control-surface: #fff8f3/);
+  assert.match(styles, /--control-text: #3b2734/);
+  assert.match(styles, /-webkit-text-fill-color: var\(--ink\)/);
   assert.match(styles, /\.controls select:disabled \{ opacity: 1; \}/);
 });
