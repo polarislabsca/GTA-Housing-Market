@@ -1,0 +1,602 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type MarketRecord = {
+  date: string;
+  city: string;
+  propertyType: string;
+  sales: number;
+  averagePrice: number | null;
+  medianPrice: number | null;
+  activeListings: number | null;
+  monthsOfInventory: number | null;
+  saleToList: number | null;
+  daysOnMarket: number | null;
+};
+
+type DashboardData = {
+  metadata: {
+    updatedThrough: string;
+    periodStart: string;
+    periodEnd: string;
+    source: string;
+    sourceUrl: string;
+    linkedWorkbook: string;
+  };
+  cities: string[];
+  propertyTypes: string[];
+  records: MarketRecord[];
+};
+
+const monthFormatter = new Intl.DateTimeFormat("en-CA", { month: "short", year: "numeric", timeZone: "UTC" });
+const monthOnlyFormatter = new Intl.DateTimeFormat("en-CA", { month: "long", timeZone: "UTC" });
+const currencyFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
+const integerFormatter = new Intl.NumberFormat("en-CA", { maximumFractionDigits: 0 });
+
+const REGION_MEMBERS: { label: string; cities: string[] }[] = [
+  { label: "Toronto", cities: ["City of Toronto", "Toronto Central", "Toronto East", "Toronto West"] },
+  { label: "York Region", cities: ["York Region", "Aurora", "East Gwillimbury", "Georgina", "King", "Markham", "Newmarket", "Richmond Hill", "Stouffville", "Vaughan", "Whitchurch-Stouffville"] },
+  { label: "Peel Region", cities: ["Peel Region", "Brampton", "Caledon", "Mississauga"] },
+  { label: "Durham Region", cities: ["Durham Region", "Ajax", "Brock", "Clarington", "Oshawa", "Pickering", "Scugog", "Uxbridge", "Whitby"] },
+  { label: "Halton Region", cities: ["Halton Region", "Burlington", "Halton Hills", "Milton", "Oakville"] },
+  { label: "Simcoe County", cities: ["Simcoe County", "Adjala-Tosorontio", "Bradford", "Bradford West Gwillimbury", "Essa", "Innisfil", "New Tecumseth"] },
+  { label: "Dufferin County", cities: ["Dufferin County", "Orangeville"] },
+];
+
+function monthLabel(date: string) {
+  return monthFormatter.format(new Date(`${date}T00:00:00Z`));
+}
+
+function monthOnlyLabel(date: string) {
+  return monthOnlyFormatter.format(new Date(`${date}T00:00:00Z`));
+}
+
+function compactCurrency(value: number) {
+  return value >= 1_000_000 ? `$${(value / 1_000_000).toFixed(2)}M` : `$${Math.round(value / 1_000)}K`;
+}
+
+function percentChange(current: number | null, previous: number | null) {
+  if (current == null || previous == null || previous === 0) return null;
+  return (current / previous - 1) * 100;
+}
+
+function changePhrase(change: number | null, subject: string) {
+  if (change == null) return `${subject} could not be compared across the selected period.`;
+  if (Math.abs(change) < 1) return `${subject} was broadly unchanged between the first and last selected month.`;
+  return `${subject} ${change > 0 ? "increased" : "decreased"} ${Math.abs(change).toFixed(1)}% between the first and last selected month.`;
+}
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
+function Delta({ value, suffix = "vs. period start" }: { value: number | null; suffix?: string }) {
+  if (value == null) return <span className="delta neutral">Not available</span>;
+  const direction = value > 0.05 ? "up" : value < -0.05 ? "down" : "neutral";
+  return <span className={`delta ${direction}`}>{value >= 0 ? "+" : ""}{value.toFixed(1)}% {suffix}</span>;
+}
+
+type PriceMode = "average" | "median" | "both";
+type VolumeMode = "sales" | "inventory";
+
+function smoothPath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+  return points.reduce((path, point, index) => {
+    if (index === 0) return `M${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+    const previous = points[index - 1];
+    const beforePrevious = points[index - 2] ?? previous;
+    const next = points[index + 1] ?? point;
+    const control1X = previous.x + (point.x - beforePrevious.x) / 6;
+    const control1Y = previous.y + (point.y - beforePrevious.y) / 6;
+    const control2X = point.x - (next.x - previous.x) / 6;
+    const control2Y = point.y - (next.y - previous.y) / 6;
+    return `${path} C${control1X.toFixed(1)},${control1Y.toFixed(1)} ${control2X.toFixed(1)},${control2Y.toFixed(1)} ${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+  }, "");
+}
+
+function CombinedMarketChart({
+  records,
+  priceMode,
+  volumeMode,
+  onPriceModeChange,
+  onVolumeModeChange,
+  medianAvailable,
+}: {
+  records: MarketRecord[];
+  priceMode: PriceMode;
+  volumeMode: VolumeMode;
+  onPriceModeChange: (mode: PriceMode) => void;
+  onVolumeModeChange: (mode: VolumeMode) => void;
+  medianAvailable: boolean;
+}) {
+  const [activeIndex, setActiveIndex] = useState(Math.max(records.length - 1, 0));
+  const width = 1180;
+  const height = 390;
+  const margin = { top: 28, right: 88, bottom: 48, left: 72 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const volumeValue = (record: MarketRecord) => volumeMode === "sales" ? record.sales : record.activeListings;
+  const volumeValues = records.map(volumeValue).filter((value): value is number => value != null);
+  const priceValues = records.flatMap((record) => {
+    if (priceMode === "average") return [record.averagePrice];
+    if (priceMode === "median") return [record.medianPrice];
+    return [record.averagePrice, record.medianPrice];
+  }).filter((value): value is number => value != null);
+  const volumeMax = Math.max(...volumeValues, 1) * 1.12;
+  const priceMinRaw = priceValues.length ? Math.min(...priceValues) : 0;
+  const priceMaxRaw = priceValues.length ? Math.max(...priceValues) : 1;
+  const priceSpread = Math.max(priceMaxRaw - priceMinRaw, priceMaxRaw * 0.08, 1);
+  const priceMin = Math.max(0, priceMinRaw - priceSpread * 0.18);
+  const priceMax = priceMaxRaw + priceSpread * 0.18;
+  const x = (index: number) => margin.left + (records.length === 1 ? plotWidth / 2 : (index / (records.length - 1)) * plotWidth);
+  const volumeY = (value: number) => margin.top + (1 - value / volumeMax) * plotHeight;
+  const priceY = (value: number) => margin.top + ((priceMax - value) / (priceMax - priceMin)) * plotHeight;
+  const barWidth = Math.max(5, Math.min(30, (plotWidth / Math.max(records.length, 1)) * 0.58));
+  const linePath = (key: "averagePrice" | "medianPrice") => {
+    const segments: { x: number; y: number }[][] = [];
+    records.forEach((record, index) => {
+      const value = record[key];
+      if (value == null) return;
+      if (index === 0 || records[index - 1][key] == null) segments.push([]);
+      segments[segments.length - 1].push({ x: x(index), y: priceY(value) });
+    });
+    return segments.map(smoothPath).join(" ");
+  };
+  const ticks = Array.from({ length: 5 }, (_, index) => index / 4);
+  const active = records[Math.min(activeIndex, Math.max(records.length - 1, 0))];
+  const volumeLabel = volumeMode === "sales" ? "Units sold" : "Active listings";
+  const showAverage = priceMode === "average" || priceMode === "both";
+  const showMedian = priceMode === "median" || priceMode === "both";
+  const showMonthTick = (record: MarketRecord, index: number) =>
+    records.length <= 12 || index === 0 || index === records.length - 1 || record.date.slice(5, 7) === "01";
+
+  useEffect(() => setActiveIndex(Math.max(records.length - 1, 0)), [records.length, priceMode, volumeMode]);
+
+  return (
+    <section className="combined-chart" aria-labelledby="market-performance-title">
+      <div className="combined-chart-heading">
+        <div>
+          <p className="eyebrow">Selected period</p>
+          <h2 id="market-performance-title">Market performance</h2>
+          <p className="chart-description">Switch the volume bars and price lines without changing your market filters.</p>
+        </div>
+        {active && (
+          <div className="combined-focus" aria-live="polite">
+            <span>{monthLabel(active.date)}</span>
+            <strong>{volumeLabel}: {volumeValue(active) == null ? "—" : integerFormatter.format(volumeValue(active) ?? 0)}</strong>
+            {showAverage && <em>Average: {active.averagePrice == null ? "—" : compactCurrency(active.averagePrice)}</em>}
+            {showMedian && <em>Median: {active.medianPrice == null ? "—" : compactCurrency(active.medianPrice)}</em>}
+          </div>
+        )}
+      </div>
+
+      <div className="metric-switches" aria-label="Chart measures">
+        <fieldset>
+          <legend>Volume bars</legend>
+          <div className="segmented-control">
+            <button type="button" className={volumeMode === "sales" ? "active" : ""} aria-pressed={volumeMode === "sales"} onClick={() => onVolumeModeChange("sales")}>Units sold</button>
+            <button type="button" className={volumeMode === "inventory" ? "active" : ""} aria-pressed={volumeMode === "inventory"} onClick={() => onVolumeModeChange("inventory")}>Active listings</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Price lines</legend>
+          <div className="segmented-control">
+            <button type="button" className={priceMode === "average" ? "active" : ""} aria-pressed={priceMode === "average"} onClick={() => onPriceModeChange("average")}>Average</button>
+            <button type="button" disabled={!medianAvailable} className={priceMode === "median" ? "active" : ""} aria-pressed={priceMode === "median"} onClick={() => onPriceModeChange("median")}>Median</button>
+            <button type="button" disabled={!medianAvailable} className={priceMode === "both" ? "active" : ""} aria-pressed={priceMode === "both"} onClick={() => onPriceModeChange("both")}>Both</button>
+          </div>
+          {!medianAvailable && <small>Combined median is not published for all property types.</small>}
+        </fieldset>
+      </div>
+
+      <div className="combined-chart-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${volumeLabel} with ${priceMode === "both" ? "average and median prices" : `${priceMode} price`} by month.`}>
+          <title>Market performance</title>
+          <desc>Monthly volume bars use the left axis. Price lines use the right axis.</desc>
+          {ticks.map((tick) => {
+            const lineY = margin.top + (1 - tick) * plotHeight;
+            return (
+              <g key={tick}>
+                <line className="grid-line" x1={margin.left} x2={width - margin.right} y1={lineY} y2={lineY} />
+                <text className="axis-label" x={margin.left - 12} y={lineY + 4} textAnchor="end">{integerFormatter.format(volumeMax * tick)}</text>
+                <text className="axis-label" x={width - margin.right + 12} y={lineY + 4}>{compactCurrency(priceMin + (priceMax - priceMin) * tick)}</text>
+              </g>
+            );
+          })}
+          {records.map((record, index) => {
+            const value = volumeValue(record);
+            return value == null ? null : <rect key={`bar-${record.date}`} className="volume-bar" x={x(index) - barWidth / 2} y={volumeY(value)} width={barWidth} height={margin.top + plotHeight - volumeY(value)} rx="3" />;
+          })}
+          {showAverage && <path className="price-series average-series" d={linePath("averagePrice")} />}
+          {showMedian && <path className="price-series median-series" d={linePath("medianPrice")} />}
+          {records.map((record, index) => (
+            <g key={record.date}>
+              <line className={`hover-line ${activeIndex === index ? "active" : ""}`} x1={x(index)} x2={x(index)} y1={margin.top} y2={margin.top + plotHeight} />
+              <rect className="hit-area" x={x(index) - Math.max(5, plotWidth / Math.max(records.length, 1) / 2)} y={margin.top} width={Math.max(10, plotWidth / Math.max(records.length, 1))} height={plotHeight} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} tabIndex={0} aria-label={`${monthLabel(record.date)}. ${volumeLabel}: ${volumeValue(record) == null ? "not available" : integerFormatter.format(volumeValue(record) ?? 0)}. Average price: ${record.averagePrice == null ? "not available" : currencyFormatter.format(record.averagePrice)}. Median price: ${record.medianPrice == null ? "not available" : currencyFormatter.format(record.medianPrice)}.`} />
+              {showMonthTick(record, index) && <text className="axis-label month-label" x={x(index)} y={height - 14} textAnchor="middle">{index === 0 || index === records.length - 1 ? monthLabel(record.date) : record.date.slice(0, 4)}</text>}
+            </g>
+          ))}
+          <text className="axis-title" x={margin.left} y={14}>{volumeLabel}</text>
+          <text className="axis-title" x={width - margin.right} y={14} textAnchor="end">Price (CAD)</text>
+        </svg>
+      </div>
+      <div className="combined-legend" aria-hidden="true">
+        <span><i className="bar-swatch" />{volumeLabel}</span>
+        {showAverage && <span><i className="average-swatch" />Average price</span>}
+        {showMedian && <span><i className="median-swatch" />Median price</span>}
+      </div>
+    </section>
+  );
+}
+
+export default function Home() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [showMonthlyDetail, setShowMonthlyDetail] = useState(false);
+  const [priceMode, setPriceMode] = useState<PriceMode>("average");
+  const [volumeMode, setVolumeMode] = useState<VolumeMode>("sales");
+  const [city, setCity] = useState("All TRREB Areas");
+  const [propertyType, setPropertyType] = useState("Detached");
+  const [startDate, setStartDate] = useState("2021-01-01");
+  const [endDate, setEndDate] = useState("2026-06-01");
+  const isGitHubPages = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("housing-dashboard-theme");
+    const preferredTheme = savedTheme === "light" || savedTheme === "dark"
+      ? savedTheme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    setTheme(preferredTheme);
+    document.documentElement.dataset.theme = preferredTheme;
+  }, []);
+
+  useEffect(() => {
+    fetch("./data/market-data.json")
+      .then((response) => {
+        if (!response.ok) throw new Error("The market data could not be loaded.");
+        return response.json();
+      })
+      .then((payload: DashboardData) => setData(payload))
+      .catch((reason: Error) => setError(reason.message));
+  }, []);
+
+  const months = useMemo(() => data ? [...new Set(data.records.map((record) => record.date))].sort() : [], [data]);
+  const years = useMemo(() => [...new Set(months.map((month) => month.slice(0, 4)))], [months]);
+  const cityGroups = useMemo(() => {
+    if (!data) return [];
+    const available = new Set(data.cities);
+    const assigned = new Set(["All TRREB Areas"]);
+    const groups = REGION_MEMBERS.map((group) => {
+      const cities = data.cities.filter((candidate) => {
+        const isTorontoDistrict = group.label === "Toronto" && candidate.startsWith("Toronto ");
+        const included = group.cities.includes(candidate) || isTorontoDistrict;
+        if (included) assigned.add(candidate);
+        return included;
+      });
+      return { ...group, cities };
+    }).filter((group) => group.cities.length > 0);
+    const other = [...available].filter((candidate) => !assigned.has(candidate));
+    if (other.length) groups.push({ label: "Other TRREB areas", cities: other });
+    return groups;
+  }, [data]);
+  const selected = useMemo(() => {
+    if (!data) return [];
+    const records = data.records.filter((record) => record.city === city && record.date >= startDate && record.date <= endDate);
+    if (propertyType !== "All property types") {
+      return records.filter((record) => record.propertyType === propertyType).sort((a, b) => a.date.localeCompare(b.date));
+    }
+    const byMonth = new Map<string, MarketRecord[]>();
+    records.forEach((record) => byMonth.set(record.date, [...(byMonth.get(record.date) ?? []), record]));
+    return [...byMonth.entries()].map(([date, monthly]) => {
+      const sales = monthly.reduce((sum, record) => sum + record.sales, 0);
+      const weighted = (field: "averagePrice" | "saleToList" | "daysOnMarket") => {
+        const reported = monthly.filter((record) => record[field] != null && record.sales > 0);
+        const weight = reported.reduce((sum, record) => sum + record.sales, 0);
+        return weight ? Math.round(reported.reduce((sum, record) => sum + (record[field] ?? 0) * record.sales, 0) / weight) : null;
+      };
+      const activeValues = monthly.map((record) => record.activeListings).filter((value): value is number => value != null);
+      const activeListings = activeValues.length ? activeValues.reduce((sum, value) => sum + value, 0) : null;
+      return {
+        date, city, propertyType: "All property types", sales,
+        averagePrice: weighted("averagePrice"), medianPrice: null, activeListings,
+        monthsOfInventory: activeListings != null && sales > 0 ? Math.round((activeListings / sales) * 100) / 100 : null,
+        saleToList: weighted("saleToList"), daysOnMarket: weighted("daysOnMarket"),
+      };
+    }).sort((a, b) => a.date.localeCompare(b.date));
+  }, [data, city, propertyType, startDate, endDate]);
+
+  const first = selected[0];
+  const latest = selected[selected.length - 1];
+  const salesChange = percentChange(latest?.sales ?? null, first?.sales ?? null);
+  const inventoryChange = percentChange(latest?.activeListings ?? null, first?.activeListings ?? null);
+  const priceChange = percentChange(latest?.averagePrice ?? null, first?.averagePrice ?? null);
+  const medianChange = percentChange(latest?.medianPrice ?? null, first?.medianPrice ?? null);
+  const volumeChange = volumeMode === "sales" ? salesChange : inventoryChange;
+  const volumeLabel = volumeMode === "sales" ? "Units sold" : "Active listings";
+  const latestVolume = volumeMode === "sales" ? latest?.sales ?? null : latest?.activeListings ?? null;
+  const medianAvailable = propertyType !== "All property types" && selected.some((record) => record.medianPrice != null);
+
+  useEffect(() => {
+    if (!medianAvailable && priceMode !== "average") setPriceMode("average");
+  }, [medianAvailable, priceMode]);
+
+  const marketSummary = useMemo(() => {
+    if (!first || !latest) return [];
+    const summary: string[] = [];
+    const latestVolumeText = latestVolume == null ? "not reported" : integerFormatter.format(latestVolume);
+    summary.push(`${changePhrase(volumeChange, volumeLabel)} The latest month recorded ${latestVolumeText.toLowerCase()} ${volumeLabel.toLowerCase()}.`);
+    if (priceMode === "average" || priceMode === "both") {
+      summary.push(`${changePhrase(priceChange, propertyType === "All property types" ? "The sales-weighted average price" : "The average price")} The latest average was ${latest.averagePrice == null ? "not reported" : currencyFormatter.format(latest.averagePrice)}.`);
+    }
+    if (priceMode === "median" || priceMode === "both") {
+      summary.push(`${changePhrase(medianChange, "The median price")} The latest median was ${latest.medianPrice == null ? "not reported" : currencyFormatter.format(latest.medianPrice)}.`);
+    }
+    if (selected.length >= 6) {
+      const values = selected.map((record) => volumeMode === "sales" ? record.sales : record.activeListings).filter((value): value is number => value != null);
+      const recent = average(values.slice(-3));
+      const previous = average(values.slice(-6, -3));
+      const momentum = percentChange(recent, previous);
+      if (momentum != null) {
+        summary.push(`Recent ${volumeLabel.toLowerCase()} momentum was ${Math.abs(momentum) < 1 ? "stable" : momentum > 0 ? "positive" : "negative"}: the latest three-month average was ${Math.abs(momentum).toFixed(1)}% ${momentum >= 0 ? "above" : "below"} the preceding three months.`);
+      }
+    }
+    const reportedVolume = selected.filter((record) => (volumeMode === "sales" ? record.sales : record.activeListings) != null);
+    const peakVolume = reportedVolume.reduce((peak, record) => ((volumeMode === "sales" ? record.sales : record.activeListings ?? 0) > (volumeMode === "sales" ? peak.sales : peak.activeListings ?? 0) ? record : peak), reportedVolume[0] ?? selected[0]);
+    const supply = latest.activeListings == null ? "Active listings were not reported" : `There were ${integerFormatter.format(latest.activeListings)} active listings`;
+    const inventory = latest.monthsOfInventory == null ? "" : `, equal to ${latest.monthsOfInventory.toFixed(2)} raw months of inventory`;
+    const pace = latest.daysOnMarket == null ? "" : `, while the average listing took ${integerFormatter.format(latest.daysOnMarket)} days to sell`;
+    const peakValue = volumeMode === "sales" ? peakVolume.sales : peakVolume.activeListings;
+    summary.push(`${supply}${inventory}${pace}. The highest ${volumeLabel.toLowerCase()} month in the selected period was ${monthLabel(peakVolume.date)}${peakValue == null ? "." : `, at ${integerFormatter.format(peakValue)}.`}`);
+    return summary;
+  }, [first, latest, latestVolume, medianChange, priceChange, priceMode, propertyType, selected, volumeChange, volumeLabel, volumeMode]);
+
+  const marketHeadline = !latest
+    ? "Read demand, supply and price together."
+    : `${salesChange == null ? "Demand" : salesChange > 1 ? "Demand improved" : salesChange < -1 ? "Demand cooled" : "Demand held steady"}${inventoryChange == null ? "." : inventoryChange > 1 ? " as available supply expanded." : inventoryChange < -1 ? " as available supply moved lower." : " while available supply held steady."}`;
+  const inventoryScaleWidth = latest?.monthsOfInventory == null ? "0%" : `${Math.min((latest.monthsOfInventory / 6) * 100, 100)}%`;
+
+  function updateStart(value: string) {
+    setStartDate(value);
+    if (value > endDate) setEndDate(value);
+  }
+
+  function updateEnd(value: string) {
+    setEndDate(value);
+    if (value < startDate) setStartDate(value);
+  }
+
+  function updateDatePart(boundary: "start" | "end", year: string, month: string) {
+    const valid = months.filter((date) => date.startsWith(`${year}-`));
+    const requested = `${year}-${month}-01`;
+    const value = valid.includes(requested) ? requested : boundary === "start" ? valid[0] : valid[valid.length - 1];
+    if (value) boundary === "start" ? updateStart(value) : updateEnd(value);
+  }
+
+  function toggleTheme() {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    window.localStorage.setItem("housing-dashboard-theme", nextTheme);
+  }
+
+  return (
+    <main>
+      <header className="site-header">
+        <div className="brand-row">
+          <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
+          <div>
+            <p className="brand-name">Toronto Housing Market</p>
+            <p className="brand-subtitle">TRREB monthly market intelligence</p>
+          </div>
+        </div>
+        <div className="header-actions">
+          <button className="theme-toggle" type="button" onClick={toggleTheme} aria-pressed={theme === "dark"} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} background`}>
+            <span className="toggle-track" aria-hidden="true"><span /></span>
+            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+          </button>
+          {!isGitHubPages && (
+            <a className="dataset-link" href="./data/TRREB_Detached_Dataset_through_2026-06.xlsx" download>
+              Download linked Excel data
+            </a>
+          )}
+        </div>
+      </header>
+
+      <section className="hero">
+        <div>
+          <p className="eyebrow">Monthly market briefing</p>
+          <h1>{marketHeadline}</h1>
+          <p className="hero-copy">A diagnostic view of how sales, listings, and prices are moving together across the selected market and period.</p>
+        </div>
+        <div className="coverage-note">
+          <span>Updated through</span>
+          <strong>June 2026</strong>
+          <small>Official monthly Market Watch reports</small>
+        </div>
+      </section>
+
+      <section className="controls" aria-label="Dashboard filters">
+        <label>
+          <span>City or area</span>
+          <select value={city} onChange={(event) => setCity(event.target.value)} disabled={!data}>
+            <option value="All TRREB Areas">All TRREB Areas</option>
+            {cityGroups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.cities.map((option) => <option key={option} value={option}>{option}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Property type</span>
+          <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)} disabled={!data}>
+            <option value="All property types">All property types</option>
+            {data?.propertyTypes.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>From year</span>
+          <select value={startDate.slice(0, 4)} onChange={(event) => updateDatePart("start", event.target.value, startDate.slice(5, 7))} disabled={!data}>
+            {years.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>From month</span>
+          <select value={startDate.slice(5, 7)} onChange={(event) => updateDatePart("start", startDate.slice(0, 4), event.target.value)} disabled={!data}>
+            {months.filter((month) => month.startsWith(`${startDate.slice(0, 4)}-`)).map((month) => <option key={month} value={month.slice(5, 7)}>{monthOnlyLabel(month)}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>To year</span>
+          <select value={endDate.slice(0, 4)} onChange={(event) => updateDatePart("end", event.target.value, endDate.slice(5, 7))} disabled={!data}>
+            {years.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>To month</span>
+          <select value={endDate.slice(5, 7)} onChange={(event) => updateDatePart("end", endDate.slice(0, 4), event.target.value)} disabled={!data}>
+            {months.filter((month) => month.startsWith(`${endDate.slice(0, 4)}-`)).map((month) => <option key={month} value={month.slice(5, 7)}>{monthOnlyLabel(month)}</option>)}
+          </select>
+        </label>
+      </section>
+
+      {error && <div className="status-message error">{error}</div>}
+      {!data && !error && <div className="status-message">Loading market data…</div>}
+
+      {data && selected.length > 0 && latest && (
+        <>
+          <section className="selection-summary">
+            <div>
+              <p className="eyebrow">Selected view</p>
+              <h2>{city} · {propertyType}</h2>
+              <p>{monthLabel(startDate)} to {monthLabel(endDate)}</p>
+            </div>
+            <p className="summary-context">Latest month in range: <strong>{monthLabel(latest.date)}</strong></p>
+          </section>
+
+          <section className="kpi-grid" aria-label="Latest selected metrics">
+            <article className="kpi">
+              <span>{volumeLabel}</span>
+              <strong>{latestVolume == null ? "—" : integerFormatter.format(latestVolume)}</strong>
+              <Delta value={volumeChange} />
+            </article>
+            <article className="kpi">
+              <span>{priceMode === "average" ? "Average price" : priceMode === "median" ? "Median price" : "Average and median price"}</span>
+              {priceMode === "both" ? (
+                <div className="dual-price-value">
+                  <strong>{latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)}</strong>
+                  <strong>{latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice)}</strong>
+                  <small>Average · Median</small>
+                </div>
+              ) : (
+                <strong>{priceMode === "average" ? (latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)) : (latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice))}</strong>
+              )}
+              {priceMode !== "both" && <Delta value={priceMode === "average" ? priceChange : medianChange} />}
+            </article>
+            <article className="kpi">
+              <span>Sale-to-list ratio</span>
+              <strong>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</strong>
+              <span className="delta neutral">{propertyType === "All property types" ? "Sales-weighted across property types" : "Latest reported month"}</span>
+            </article>
+            <article className="kpi">
+              <span>Months of inventory</span>
+              <strong>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</strong>
+              <span className="delta neutral">Active listings ÷ monthly sales</span>
+            </article>
+          </section>
+
+          <div className="market-workspace">
+            <CombinedMarketChart
+              records={selected}
+              priceMode={priceMode}
+              volumeMode={volumeMode}
+              onPriceModeChange={setPriceMode}
+              onVolumeModeChange={setVolumeMode}
+              medianAvailable={medianAvailable}
+            />
+
+            <aside className="diagnostic-column" aria-label="Market balance and automatic analysis">
+              <section className="market-balance-card" aria-labelledby="market-balance-title">
+                <p className="eyebrow">Supply vs. demand</p>
+                <h2 id="market-balance-title">Market balance</h2>
+                <div className="inventory-meter" aria-label={latest.monthsOfInventory == null ? "Months of inventory unavailable" : `${latest.monthsOfInventory.toFixed(2)} months of inventory on a display scale from zero to six or more months`}>
+                  <span style={{ width: inventoryScaleWidth }} />
+                </div>
+                <div className="inventory-scale-labels"><span>0 months</span><span>3</span><span>6+</span></div>
+                <dl>
+                  <div><dt>Active listings</dt><dd>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</dd></div>
+                  <div><dt>Months of inventory</dt><dd>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</dd></div>
+                  <div><dt>Days on market</dt><dd>{latest.daysOnMarket == null ? "—" : integerFormatter.format(latest.daysOnMarket)}</dd></div>
+                  <div><dt>Sale-to-list ratio</dt><dd>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</dd></div>
+                </dl>
+              </section>
+
+              <section className="market-briefing-card" aria-labelledby="market-briefing-title">
+                <p className="eyebrow">Automatic analysis</p>
+                <h2 id="market-briefing-title">Signals to watch</h2>
+                {marketSummary.slice(0, 3).map((statement) => <p key={statement}>{statement}</p>)}
+              </section>
+            </aside>
+          </div>
+
+          <section className="table-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Monthly detail</p>
+                <h2>Selected period data</h2>
+                <p className="table-summary">{selected.length} monthly records available</p>
+              </div>
+              <button
+                className="detail-toggle"
+                type="button"
+                aria-expanded={showMonthlyDetail}
+                aria-controls="monthly-detail-table"
+                onClick={() => setShowMonthlyDetail((visible) => !visible)}
+              >
+                {showMonthlyDetail ? "Hide monthly detail" : "Show monthly detail"}
+                <span aria-hidden="true">{showMonthlyDetail ? "−" : "+"}</span>
+              </button>
+            </div>
+            {showMonthlyDetail && (
+              <div id="monthly-detail-table" className="monthly-detail-content">
+                <p className="table-note">{propertyType === "All property types" ? "Combined average price is weighted by units sold; an exact combined median is not published." : "Raw months of inventory = active listings ÷ monthly sales"}</p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Month</th><th>Units sold</th><th>Average price</th><th>Median price</th><th>Active listings</th><th>Raw MOS</th><th>Avg. LDOM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selected.map((record) => (
+                        <tr key={record.date}>
+                          <td>{monthLabel(record.date)}</td>
+                          <td>{integerFormatter.format(record.sales)}</td>
+                          <td>{record.averagePrice == null ? "—" : currencyFormatter.format(record.averagePrice)}</td>
+                          <td>{record.medianPrice == null ? "—" : currencyFormatter.format(record.medianPrice)}</td>
+                          <td>{record.activeListings == null ? "—" : integerFormatter.format(record.activeListings)}</td>
+                          <td>{record.monthsOfInventory == null ? "—" : record.monthsOfInventory.toFixed(2)}</td>
+                          <td>{record.daysOnMarket == null ? "—" : integerFormatter.format(record.daysOnMarket)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {data && selected.length === 0 && <div className="status-message">No reported transactions match this selection.</div>}
+
+      <footer>
+        <p>Property-type dashboard coverage: January 2021–June 2026, compiled from official monthly TRREB Market Watch reports.</p>
+        <a href="https://public.trreb.ca/market-data/market-watch/" target="_blank" rel="noreferrer">View official TRREB Market Watch source</a>
+      </footer>
+    </main>
+  );
+}
