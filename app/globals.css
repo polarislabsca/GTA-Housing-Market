@@ -354,7 +354,7 @@ html[data-theme="dark"] .segmented-control button.active { background: var(--cor
 .volume-bar { fill: var(--coral); opacity: 0.24; }
 .price-series { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
 .average-series { stroke: var(--teal); }
-.median-series { stroke: var(--coral); }
+.median-series { stroke: var(--coral); stroke-dasharray: 7 4; }
 .axis-title { fill: var(--axis); font-size: 12px; font-weight: 700; }
 .combined-legend { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 18px; color: var(--muted); font-size: 0.74rem; }
 .combined-legend span { display: flex; align-items: center; gap: 7px; }
@@ -362,7 +362,7 @@ html[data-theme="dark"] .segmented-control button.active { background: var(--cor
 .bar-swatch { height: 10px; background: var(--coral); opacity: 0.3; border-radius: 2px; }
 .average-swatch, .median-swatch { height: 3px; border-radius: 99px; }
 .average-swatch { background: var(--teal); }
-.median-swatch { background: var(--coral); }
+.median-swatch { background: repeating-linear-gradient(90deg, var(--coral) 0, var(--coral) 7px, transparent 7px, transparent 11px); border-radius: 0; }
 .dual-price-value { margin: 10px 0 8px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
 .dual-price-value strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: clamp(1.05rem, 1.6vw, 1.5rem); letter-spacing: -0.04em; white-space: nowrap; }
 .dual-price-value small { grid-column: 1 / -1; margin-top: 6px; color: var(--muted); font-size: 0.72rem; word-spacing: 5px; }

@@ -746,12 +746,12 @@ export default function Home() {
               <span>{priceMode === "average" ? "Average price" : priceMode === "median" ? "Median price" : "Average and median price"}</span>
               {priceMode === "both" ? (
                 <div className="dual-price-value">
-                  <strong>{latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)}</strong>
-                  <strong>{latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice)}</strong>
+                  <strong>{latest.averagePrice == null ? "—" : compactCurrency(latest.averagePrice)}</strong>
+                  <strong>{latest.medianPrice == null ? "—" : compactCurrency(latest.medianPrice)}</strong>
                   <small>Average · Median</small>
                 </div>
               ) : (
-                <strong>{priceMode === "average" ? (latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)) : (latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice))}</strong>
+                <strong>{priceMode === "average" ? (latest.averagePrice == null ? "—" : compactCurrency(latest.averagePrice)) : (latest.medianPrice == null ? "—" : compactCurrency(latest.medianPrice))}</strong>
               )}
               {priceMode !== "both" && <Delta value={priceMode === "average" ? priceChange : medianChange} />}
               <YoyDelta
@@ -806,8 +806,17 @@ export default function Home() {
                 <dl>
                   <div><dt>Active listings</dt><dd>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</dd></div>
                   <div><dt>Months of inventory</dt><dd>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</dd></div>
-                  <div><dt>Days on market</dt><dd>{latest.daysOnMarket == null ? "—" : integerFormatter.format(latest.daysOnMarket)}</dd></div>
-                  <div><dt>Sale-to-list ratio</dt><dd>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</dd></div>
+                  <div>
+                    <dt>Supply vs. year ago</dt>
+                    <dd>{(() => {
+                      const invChange = percentChange(latest.monthsOfInventory, yearAgo?.monthsOfInventory ?? null);
+                      const listChange = percentChange(latest.activeListings, yearAgo?.activeListings ?? null);
+                      const change = invChange ?? listChange;
+                      if (change == null) return "—";
+                      if (Math.abs(change) < 5) return "Broadly stable";
+                      return change > 0 ? `Expanding (+${change.toFixed(0)}%)` : `Tightening (${change.toFixed(0)}%)`;
+                    })()}</dd>
+                  </div>
                 </dl>
               </section>
 
