@@ -381,6 +381,7 @@ html[data-theme="dark"] .segmented-control button.active { background: var(--cor
 .gauge-fill-balanced { stroke: #7ac8c4; }
 .gauge-fill-buyer { stroke: #d4c070; }
 .gauge-boundary-tick { stroke: rgba(255, 255, 255, 0.32); stroke-width: 2; }
+.gauge-boundary-label { fill: rgba(216, 240, 238, 0.5); font-size: 9.5px; }
 .gauge-tip-dot { fill: #ffffff; stroke: var(--navy-deep); stroke-width: 2; }
 .gauge-end-label { fill: rgba(216, 240, 238, 0.55); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .gauge-readout { margin-top: -18px; }

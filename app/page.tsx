@@ -298,8 +298,12 @@ function InventoryGauge({ value, conditionCls }: { value: number | null; conditi
     inner: polarPoint(cx, cy, r - strokeW / 2 - 3, f),
     outer: polarPoint(cx, cy, r + strokeW / 2 + 3, f),
   });
+  const boundaryLabel = (f: number) => polarPoint(cx, cy, r + strokeW / 2 + 15, f);
   const t1 = boundaryTick(sellerEnd);
   const t2 = boundaryTick(balancedEnd);
+  const l1 = boundaryLabel(sellerEnd);
+  const l2 = boundaryLabel(balancedEnd);
+  const labelAnchor = (x: number) => (x < cx - 3 ? "end" : x > cx + 3 ? "start" : "middle");
   return (
     <div className="inventory-gauge">
       <svg viewBox="0 0 280 148" role="img" aria-label={value == null ? "Months of inventory unavailable" : `${value.toFixed(2)} months of inventory, on a scale from zero to six or more`}>
@@ -307,6 +311,8 @@ function InventoryGauge({ value, conditionCls }: { value: number | null; conditi
         {fraction != null && <path d={gaugeArcPath(cx, cy, r, 0, fraction)} className={`gauge-fill ${fillClass}`} strokeWidth={strokeW} fill="none" />}
         <line x1={t1.inner.x} y1={t1.inner.y} x2={t1.outer.x} y2={t1.outer.y} className="gauge-boundary-tick" />
         <line x1={t2.inner.x} y1={t2.inner.y} x2={t2.outer.x} y2={t2.outer.y} className="gauge-boundary-tick" />
+        <text x={l1.x} y={l1.y + 3} className="gauge-boundary-label" textAnchor={labelAnchor(l1.x)}>3 mo</text>
+        <text x={l2.x} y={l2.y + 3} className="gauge-boundary-label" textAnchor={labelAnchor(l2.x)}>4 mo</text>
         {tip && <circle cx={tip.x} cy={tip.y} r="7" className="gauge-tip-dot" />}
         <text x={cx - r - 2} y={cy + 22} className="gauge-end-label" textAnchor="start">0 mo</text>
         <text x={cx + r + 2} y={cy + 22} className="gauge-end-label" textAnchor="end">6+ mo</text>
