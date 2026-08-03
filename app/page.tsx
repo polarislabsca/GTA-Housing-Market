@@ -286,21 +286,28 @@ function gaugeArcPath(cx: number, cy: number, r: number, f1: number, f2: number)
   return `M ${p1.x} ${p1.y} A ${r} ${r} 0 0 1 ${p2.x} ${p2.y}`;
 }
 
-function InventoryGauge({ value }: { value: number | null }) {
+function InventoryGauge({ value, conditionCls }: { value: number | null; conditionCls: string | null }) {
   const cx = 140, cy = 122, r = 92, strokeW = 20;
   const clamped = value == null ? null : Math.min(Math.max(value, 0), 6);
   const fraction = clamped == null ? null : clamped / 6;
   const sellerEnd = 3 / 6;
   const balancedEnd = 4 / 6;
-  const tickInner = fraction == null ? null : polarPoint(cx, cy, r - strokeW / 2 - 5, fraction);
-  const tickOuter = fraction == null ? null : polarPoint(cx, cy, r + strokeW / 2 + 5, fraction);
+  const fillClass = conditionCls === "condition-seller" ? "gauge-fill-seller" : conditionCls === "condition-buyer" ? "gauge-fill-buyer" : "gauge-fill-balanced";
+  const tip = fraction == null ? null : polarPoint(cx, cy, r, fraction);
+  const boundaryTick = (f: number) => ({
+    inner: polarPoint(cx, cy, r - strokeW / 2 - 3, f),
+    outer: polarPoint(cx, cy, r + strokeW / 2 + 3, f),
+  });
+  const t1 = boundaryTick(sellerEnd);
+  const t2 = boundaryTick(balancedEnd);
   return (
     <div className="inventory-gauge">
       <svg viewBox="0 0 280 148" role="img" aria-label={value == null ? "Months of inventory unavailable" : `${value.toFixed(2)} months of inventory, on a scale from zero to six or more`}>
-        <path d={gaugeArcPath(cx, cy, r, 0, sellerEnd)} className="gauge-arc gauge-seller" strokeWidth={strokeW} fill="none" />
-        <path d={gaugeArcPath(cx, cy, r, sellerEnd, balancedEnd)} className="gauge-arc gauge-balanced" strokeWidth={strokeW} fill="none" />
-        <path d={gaugeArcPath(cx, cy, r, balancedEnd, 1)} className="gauge-arc gauge-buyer" strokeWidth={strokeW} fill="none" />
-        {tickInner && tickOuter && <line x1={tickInner.x} y1={tickInner.y} x2={tickOuter.x} y2={tickOuter.y} className="gauge-needle" />}
+        <path d={gaugeArcPath(cx, cy, r, 0, 1)} className="gauge-track" strokeWidth={strokeW} fill="none" />
+        {fraction != null && <path d={gaugeArcPath(cx, cy, r, 0, fraction)} className={`gauge-fill ${fillClass}`} strokeWidth={strokeW} fill="none" />}
+        <line x1={t1.inner.x} y1={t1.inner.y} x2={t1.outer.x} y2={t1.outer.y} className="gauge-boundary-tick" />
+        <line x1={t2.inner.x} y1={t2.inner.y} x2={t2.outer.x} y2={t2.outer.y} className="gauge-boundary-tick" />
+        {tip && <circle cx={tip.x} cy={tip.y} r="7" className="gauge-tip-dot" />}
         <text x={cx - r - 2} y={cy + 22} className="gauge-end-label" textAnchor="start">0 mo</text>
         <text x={cx + r + 2} y={cy + 22} className="gauge-end-label" textAnchor="end">6+ mo</text>
       </svg>
@@ -313,6 +320,7 @@ function InventoryGauge({ value }: { value: number | null }) {
 }
 
 function InventorySparkline({ records }: { records: MarketRecord[] }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const points = records.filter((record): record is MarketRecord & { monthsOfInventory: number } => record.monthsOfInventory != null);
   if (points.length < 2) return null;
   const width = 280, height = 64, pad = 6;
@@ -323,14 +331,34 @@ function InventorySparkline({ records }: { records: MarketRecord[] }) {
   const x = (index: number) => pad + (index / (points.length - 1)) * (width - pad * 2);
   const y = (value: number) => pad + (1 - (value - min) / span) * (height - pad * 2);
   const path = points.map((record, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(record.monthsOfInventory)}`).join(" ");
-  const first = points[0];
-  const last = points[points.length - 1];
+  const segWidth = (width - pad * 2) / Math.max(points.length - 1, 1);
+  const shownIndex = activeIndex ?? points.length - 1;
+  const shown = points[shownIndex];
+  const captionText = activeIndex == null
+    ? `Months of inventory · ${points.length}-month trend`
+    : `${monthLabel(shown.date)} — ${shown.monthsOfInventory.toFixed(2)} months of inventory`;
   return (
     <div className="inventory-sparkline">
-      <p className="sparkline-caption">Months of inventory · {points.length}-month trend</p>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Months of inventory across the selected period, from ${first.monthsOfInventory.toFixed(1)} to ${last.monthsOfInventory.toFixed(1)}`}>
+      <p className="sparkline-caption">{captionText}</p>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Months of inventory across the selected period, hoverable, from ${points[0].monthsOfInventory.toFixed(1)} to ${points[points.length - 1].monthsOfInventory.toFixed(1)}`} onMouseLeave={() => setActiveIndex(null)}>
         <path d={path} className="sparkline-path" fill="none" />
-        <circle cx={x(points.length - 1)} cy={y(last.monthsOfInventory)} r="3.5" className="sparkline-dot" />
+        {activeIndex != null && <line x1={x(activeIndex)} x2={x(activeIndex)} y1="0" y2={height} className="sparkline-hover-line" />}
+        <circle cx={x(shownIndex)} cy={y(shown.monthsOfInventory)} r="3.5" className="sparkline-dot" />
+        {points.map((record, index) => (
+          <rect
+            key={record.date}
+            x={x(index) - segWidth / 2}
+            y={0}
+            width={segWidth}
+            height={height}
+            className="sparkline-hit"
+            onMouseEnter={() => setActiveIndex(index)}
+            onFocus={() => setActiveIndex(index)}
+            onBlur={() => setActiveIndex(null)}
+            tabIndex={0}
+            aria-label={`${monthLabel(record.date)}: ${record.monthsOfInventory.toFixed(2)} months of inventory`}
+          />
+        ))}
       </svg>
     </div>
   );
@@ -862,7 +890,7 @@ export default function Home() {
               {marketCondition && (
                 <div className={`market-condition-label ${marketCondition.cls}`}>{marketCondition.label}</div>
               )}
-              <InventoryGauge value={latest.monthsOfInventory} />
+              <InventoryGauge value={latest.monthsOfInventory} conditionCls={marketCondition?.cls ?? null} />
               <div className="inventory-zone-labels"><span>Seller's</span><span>Balanced</span><span>Buyer's</span></div>
               <InventorySparkline records={selected} />
               <dl>

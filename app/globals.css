@@ -375,22 +375,28 @@ html[data-theme="dark"] .segmented-control button.active { background: var(--cor
 /* Semi-circular gauge visualizing months of inventory (0-6+) */
 .inventory-gauge { margin: 14px 0 0; text-align: center; }
 .inventory-gauge svg { display: block; width: 100%; height: auto; }
-.gauge-arc { stroke-linecap: round; }
-.gauge-seller { stroke: #7dd4b8; }
-.gauge-balanced { stroke: rgba(255, 255, 255, 0.2); }
-.gauge-buyer { stroke: #d4c070; }
-.gauge-needle { stroke: #ffffff; stroke-width: 3; stroke-linecap: round; }
+.gauge-track { stroke: rgba(255, 255, 255, 0.1); stroke-linecap: round; }
+.gauge-fill { stroke-linecap: round; transition: stroke-dasharray 300ms ease; }
+.gauge-fill-seller { stroke: #7dd4b8; }
+.gauge-fill-balanced { stroke: #7ac8c4; }
+.gauge-fill-buyer { stroke: #d4c070; }
+.gauge-boundary-tick { stroke: rgba(255, 255, 255, 0.32); stroke-width: 2; }
+.gauge-tip-dot { fill: #ffffff; stroke: var(--navy-deep); stroke-width: 2; }
 .gauge-end-label { fill: rgba(216, 240, 238, 0.55); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .gauge-readout { margin-top: -18px; }
 .gauge-readout strong { display: block; font-size: 1.9rem; letter-spacing: -0.04em; }
 .gauge-readout span { display: block; margin-top: 2px; color: rgba(216, 240, 238, 0.62); font-size: 0.76rem; }
 
-/* Compact trend line beneath the gauge, reusing the selected period's data */
+/* Compact, hoverable trend line beneath the gauge, reusing the selected period's data */
 .inventory-sparkline { margin-top: 20px; }
 .sparkline-caption { margin: 0 0 8px; color: rgba(216, 240, 238, 0.55); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.inventory-sparkline svg { display: block; width: 100%; height: auto; }
-.sparkline-path { stroke: #9fdcd8; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
-.sparkline-dot { fill: #9fdcd8; stroke: var(--navy-deep); stroke-width: 1.5; }
+.inventory-sparkline svg { display: block; width: 100%; height: auto; overflow: visible; }
+.sparkline-path { stroke: #9fdcd8; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.sparkline-dot { fill: #9fdcd8; stroke: var(--navy-deep); stroke-width: 1.5; pointer-events: none; }
+.sparkline-hover-line { stroke: rgba(255, 255, 255, 0.32); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+.sparkline-hit { fill: transparent; cursor: crosshair; }
+.sparkline-hit:focus { outline: none; }
+.sparkline-hit:focus-visible { fill: rgba(255, 255, 255, 0.06); }
 
 /* Market condition label above the meter (in the dark balance card) */
 .market-condition-label {
