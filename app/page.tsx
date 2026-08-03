@@ -421,36 +421,145 @@ export default function Home() {
   const marketSummary = useMemo(() => {
     if (!first || !latest) return [];
     const summary: string[] = [];
-    const latestVolumeText = latestVolume == null ? "not reported" : integerFormatter.format(latestVolume);
-    summary.push(`${changePhrase(volumeChange, volumeLabel)} The latest month recorded ${latestVolumeText.toLowerCase()} ${volumeLabel.toLowerCase()}.`);
+
+    // Period label
+    const periodMonths = selected.length;
+    const periodLabel = periodMonths === 1 ? "one month"
+      : periodMonths < 13 ? `${periodMonths} months`
+      : periodMonths < 24 ? "one year"
+      : `${(periodMonths / 12).toFixed(1)} years`;
+
+    // 1. Volume trend — absolute numbers from first to latest
+    const firstVol = volumeMode === "sales" ? first.sales : first.activeListings;
+    const latestVol = volumeMode === "sales" ? latest.sales : latest.activeListings;
+    const volTrend = volumeChange == null ? "could not be compared due to missing data"
+      : Math.abs(volumeChange) < 1 ? "was broadly unchanged"
+      : `${volumeChange > 0 ? "rose" : "fell"} ${Math.abs(volumeChange).toFixed(1)}%`;
+    const volAbsolute = firstVol != null && latestVol != null
+      ? `, moving from ${integerFormatter.format(firstVol)} in ${monthLabel(first.date)} to ${integerFormatter.format(latestVol)} in ${monthLabel(latest.date)}`
+      : "";
+    summary.push(`Over ${periodLabel}, ${volumeLabel.toLowerCase()} ${volTrend}${volAbsolute}.`);
+
+    // 2. Price trend — absolute numbers + year-over-year comparison
     if (priceMode === "average" || priceMode === "both") {
-      summary.push(`${changePhrase(priceChange, propertyType === "All property types" ? "The sales-weighted average price" : "The average price")} The latest average was ${latest.averagePrice == null ? "not reported" : currencyFormatter.format(latest.averagePrice)}.`);
+      const priceYoY = percentChange(latest.averagePrice, yearAgo?.averagePrice ?? null);
+      const priceLabel = propertyType === "All property types" ? "The sales-weighted average price" : "The average price";
+      const priceTrend = priceChange == null ? "could not be compared"
+        : Math.abs(priceChange) < 1 ? "held flat"
+        : `${priceChange > 0 ? "gained" : "declined"} ${Math.abs(priceChange).toFixed(1)}%`;
+      const priceAbsolute = first.averagePrice != null && latest.averagePrice != null
+        ? `, from ${currencyFormatter.format(first.averagePrice)} to ${currencyFormatter.format(latest.averagePrice)}`
+        : "";
+      const yoyClause = priceYoY == null ? ""
+        : Math.abs(priceYoY) < 1 ? " The latest reading was little changed from the same month a year earlier."
+        : ` Year-over-year, the latest reading was ${Math.abs(priceYoY).toFixed(1)}% ${priceYoY > 0 ? "above" : "below"} ${monthLabel(yearAgo?.date ?? "")} — ${Math.abs(priceYoY) > 5 ? (priceYoY > 0 ? "a meaningful annual gain" : "a meaningful annual decline") : (priceYoY > 0 ? "a modest annual gain" : "a modest annual pullback")}.`;
+      summary.push(`${priceLabel} ${priceTrend}${priceAbsolute}.${yoyClause}`);
     }
     if (priceMode === "median" || priceMode === "both") {
-      summary.push(`${changePhrase(medianChange, "The median price")} The latest median was ${latest.medianPrice == null ? "not reported" : currencyFormatter.format(latest.medianPrice)}.`);
+      const medianTrend = medianChange == null ? "could not be compared"
+        : Math.abs(medianChange) < 1 ? "held flat"
+        : `${medianChange > 0 ? "gained" : "declined"} ${Math.abs(medianChange).toFixed(1)}%`;
+      const medianAbsolute = first.medianPrice != null && latest.medianPrice != null
+        ? `, from ${currencyFormatter.format(first.medianPrice)} to ${currencyFormatter.format(latest.medianPrice)}`
+        : "";
+      summary.push(`The median price ${medianTrend}${medianAbsolute}.`);
     }
+
+    // 3. Sale-to-list interpretation — what the ratio means in practical terms
+    if (latest.saleToList != null) {
+      const stl = latest.saleToList;
+      const stlYoY = yearAgo?.saleToList ?? null;
+      const stlMeaning = stl >= 102
+        ? "competition is pushing homes to sell above asking — characteristic of a heated seller's market"
+        : stl >= 100
+          ? "homes are selling at or above their listed price, reflecting firm buyer demand"
+          : stl >= 97
+            ? "homes are selling close to but slightly below asking price — balanced negotiating conditions"
+            : "buyers hold meaningful negotiating leverage below the listed price";
+      const stlYoYClause = stlYoY != null && Math.abs(stl - stlYoY) >= 1
+        ? ` This is ${stl > stlYoY ? `${(stl - stlYoY).toFixed(1)} pp above` : `${(stlYoY - stl).toFixed(1)} pp below`} the same month a year earlier.`
+        : "";
+      summary.push(`The sale-to-list ratio stands at ${stl}%, indicating ${stlMeaning}.${stlYoYClause}`);
+    }
+
+    // 4. Short-term momentum — recent 3 months vs prior 3 months
     if (selected.length >= 6) {
-      const values = selected.map((record) => volumeMode === "sales" ? record.sales : record.activeListings).filter((value): value is number => value != null);
+      const values = selected.map((r) => volumeMode === "sales" ? r.sales : r.activeListings).filter((v): v is number => v != null);
       const recent = average(values.slice(-3));
       const previous = average(values.slice(-6, -3));
       const momentum = percentChange(recent, previous);
       if (momentum != null) {
-        summary.push(`Recent ${volumeLabel.toLowerCase()} momentum was ${Math.abs(momentum) < 1 ? "stable" : momentum > 0 ? "positive" : "negative"}: the latest three-month average was ${Math.abs(momentum).toFixed(1)}% ${momentum >= 0 ? "above" : "below"} the preceding three months.`);
+        const dirLabel = Math.abs(momentum) < 1 ? "stable"
+          : momentum > 0 ? "positive" : "negative";
+        const implication = Math.abs(momentum) < 1
+          ? "suggesting the market has reached a near-term equilibrium"
+          : momentum > 5 ? "pointing to an acceleration in market activity"
+          : momentum > 0 ? "suggesting a modest pick-up in near-term demand"
+          : momentum < -5 ? "pointing to a softening in market conditions"
+          : "suggesting a modest easing in near-term activity";
+        summary.push(`Short-term momentum in ${volumeLabel.toLowerCase()} is ${dirLabel}: the latest three-month average was ${Math.abs(momentum).toFixed(1)}% ${momentum >= 0 ? "above" : "below"} the preceding three months, ${implication}.`);
       }
     }
-    const reportedVolume = selected.filter((record) => (volumeMode === "sales" ? record.sales : record.activeListings) != null);
-    const peakVolume = reportedVolume.reduce((peak, record) => ((volumeMode === "sales" ? record.sales : record.activeListings ?? 0) > (volumeMode === "sales" ? peak.sales : peak.activeListings ?? 0) ? record : peak), reportedVolume[0] ?? selected[0]);
-    const supply = latest.activeListings == null ? "Active listings were not reported" : `There were ${integerFormatter.format(latest.activeListings)} active listings`;
-    const inventory = latest.monthsOfInventory == null ? "" : `, equal to ${latest.monthsOfInventory.toFixed(2)} raw months of inventory`;
-    const pace = latest.daysOnMarket == null ? "" : `, while the average listing took ${integerFormatter.format(latest.daysOnMarket)} days to sell`;
-    const peakValue = volumeMode === "sales" ? peakVolume.sales : peakVolume.activeListings;
-    summary.push(`${supply}${inventory}${pace}. The highest ${volumeLabel.toLowerCase()} month in the selected period was ${monthLabel(peakVolume.date)}${peakValue == null ? "." : `, at ${integerFormatter.format(peakValue)}.`}`);
+
+    // 5. Supply and liquidity — inventory context with practical interpretation
+    if (latest.activeListings != null || latest.monthsOfInventory != null) {
+      const supplyText = latest.activeListings != null
+        ? `There were ${integerFormatter.format(latest.activeListings)} active listings in ${monthLabel(latest.date)}`
+        : "Active listing counts were not reported";
+      const inventoryText = latest.monthsOfInventory == null ? ""
+        : latest.monthsOfInventory < 2 ? `, representing ${latest.monthsOfInventory.toFixed(2)} months of inventory — well inside seller's territory`
+        : latest.monthsOfInventory < 3 ? `, representing ${latest.monthsOfInventory.toFixed(2)} months of inventory — a seller's market`
+        : latest.monthsOfInventory < 4 ? `, representing ${latest.monthsOfInventory.toFixed(2)} months of inventory — a balanced market`
+        : latest.monthsOfInventory < 6 ? `, representing ${latest.monthsOfInventory.toFixed(2)} months of inventory — a buyer's market`
+        : `, representing ${latest.monthsOfInventory.toFixed(2)} months of inventory — deeply in buyer's market territory`;
+      const domText = latest.daysOnMarket == null ? ""
+        : latest.daysOnMarket < 15 ? ` Homes are moving quickly, averaging ${integerFormatter.format(latest.daysOnMarket)} days to sell.`
+        : latest.daysOnMarket < 30 ? ` The average listing sold in ${integerFormatter.format(latest.daysOnMarket)} days — an active pace.`
+        : latest.daysOnMarket < 50 ? ` At ${integerFormatter.format(latest.daysOnMarket)} average days on market, buyers have reasonable time to conduct due diligence.`
+        : ` The ${integerFormatter.format(latest.daysOnMarket)}-day average on market suggests homes are taking considerably longer to sell.`;
+      summary.push(`${supplyText}${inventoryText}.${domText}`);
+    }
+
+    // 6. Peak context — where was the high-water mark and how far off is it now
+    const reportedVolume = selected.filter((r) => (volumeMode === "sales" ? r.sales : r.activeListings) != null);
+    if (reportedVolume.length > 1) {
+      const peakRecord = reportedVolume.reduce((peak, r) => {
+        const val = volumeMode === "sales" ? r.sales : (r.activeListings ?? 0);
+        const peakVal = volumeMode === "sales" ? peak.sales : (peak.activeListings ?? 0);
+        return val > peakVal ? r : peak;
+      }, reportedVolume[0]);
+      const peakVal = volumeMode === "sales" ? peakRecord.sales : peakRecord.activeListings;
+      const latestValForPeak = volumeMode === "sales" ? latest.sales : latest.activeListings;
+      const gapClause = peakVal != null && latestValForPeak != null && latestValForPeak > 0 && peakRecord.date !== latest.date
+        ? `, ${((peakVal / latestValForPeak - 1) * 100).toFixed(0)}% above the most recent month`
+        : "";
+      if (peakVal != null && peakRecord.date !== latest.date) {
+        summary.push(`The highest ${volumeLabel.toLowerCase()} in the selected period was ${monthLabel(peakRecord.date)} at ${integerFormatter.format(peakVal)}${gapClause}.`);
+      }
+    }
+
     return summary;
-  }, [first, latest, latestVolume, medianChange, priceChange, priceMode, propertyType, selected, volumeChange, volumeLabel, volumeMode]);
+  }, [first, latest, medianChange, priceChange, priceMode, propertyType, selected, volumeChange, volumeLabel, volumeMode, yearAgo]);
 
   const marketHeadline = !latest
     ? "Read demand, supply and price together."
-    : `${salesChange == null ? "Demand" : salesChange > 1 ? "Demand improved" : salesChange < -1 ? "Demand cooled" : "Demand held steady"}${inventoryChange == null ? "." : inventoryChange > 1 ? " as available supply expanded." : inventoryChange < -1 ? " as available supply moved lower." : " while available supply held steady."}`;
+    : (() => {
+        const headlinePriceChange = priceChange ?? medianChange;
+        const demandPart = salesChange == null ? "Demand"
+          : Math.abs(salesChange) < 1 ? "Demand held steady"
+          : salesChange > 0 ? `Sales rose ${Math.abs(salesChange).toFixed(0)}%`
+          : `Sales fell ${Math.abs(salesChange).toFixed(0)}%`;
+        const pricePart = headlinePriceChange == null ? ""
+          : Math.abs(headlinePriceChange) < 1 ? ", with prices holding firm"
+          : headlinePriceChange > 0 ? `, lifting average prices ${Math.abs(headlinePriceChange).toFixed(0)}%`
+          : `, pulling average prices ${Math.abs(headlinePriceChange).toFixed(0)}% lower`;
+        const supplyPart = inventoryChange == null ? ""
+          : Math.abs(inventoryChange) < 5 ? " on stable inventory"
+          : inventoryChange > 0 ? " against a rising supply backdrop"
+          : " as available supply contracted";
+        const conditionPart = marketCondition ? ` — ${marketCondition.label.toLowerCase()}` : "";
+        return `${demandPart}${pricePart}${supplyPart}${conditionPart}.`;
+      })();
   const inventoryScaleWidth = latest?.monthsOfInventory == null ? "0%" : `${Math.min((latest.monthsOfInventory / 6) * 100, 100)}%`;
 
   function applyPreset(years: number | "all") {
