@@ -162,14 +162,15 @@ function CombinedMarketChart({
     if (priceMode === "median") return [record.medianPrice];
     return [record.averagePrice, record.medianPrice];
   }).filter((value): value is number => value != null);
-  const volumeMax = Math.max(...volumeValues, 1) * 1.12;
+  const volumeMin = volumeValues.length > 0 ? Math.max(0, Math.min(...volumeValues) * 0.72) : 0;
+  const volumeMax = Math.max(...volumeValues, 1) * 1.08;
   const priceMinRaw = priceValues.length ? Math.min(...priceValues) : 0;
   const priceMaxRaw = priceValues.length ? Math.max(...priceValues) : 1;
-  const priceSpread = Math.max(priceMaxRaw - priceMinRaw, priceMaxRaw * 0.08, 1);
-  const priceMin = Math.max(0, priceMinRaw - priceSpread * 0.18);
-  const priceMax = priceMaxRaw + priceSpread * 0.18;
+  const priceSpread = Math.max(priceMaxRaw - priceMinRaw, priceMaxRaw * 0.06, 1);
+  const priceMin = Math.max(0, priceMinRaw - priceSpread * 0.08);
+  const priceMax = priceMaxRaw + priceSpread * 0.08;
   const x = (index: number) => margin.left + (records.length === 1 ? plotWidth / 2 : (index / (records.length - 1)) * plotWidth);
-  const volumeY = (value: number) => margin.top + (1 - value / volumeMax) * plotHeight;
+  const volumeY = (value: number) => margin.top + ((volumeMax - value) / (volumeMax - volumeMin)) * plotHeight;
   const priceY = (value: number) => margin.top + ((priceMax - value) / (priceMax - priceMin)) * plotHeight;
   const barWidth = Math.max(5, Math.min(30, (plotWidth / Math.max(records.length, 1)) * 0.58));
   const linePath = (key: "averagePrice" | "medianPrice") => {
@@ -192,6 +193,9 @@ function CombinedMarketChart({
 
   useEffect(() => setActiveIndex(Math.max(records.length - 1, 0)), [records.length, priceMode, volumeMode]);
 
+  const lastAvgY = showAverage ? (() => { for (let i = records.length - 1; i >= 0; i--) { if (records[i].averagePrice != null) return priceY(records[i].averagePrice!); } return null; })() : null;
+  const lastMedianY = showMedian ? (() => { for (let i = records.length - 1; i >= 0; i--) { if (records[i].medianPrice != null) return priceY(records[i].medianPrice!); } return null; })() : null;
+
   return (
     <section className="combined-chart" aria-labelledby="market-performance-title">
       <div className="combined-chart-heading">
@@ -204,8 +208,8 @@ function CombinedMarketChart({
           <div className="combined-focus" aria-live="polite">
             <span>{monthLabel(active.date)}</span>
             <strong>{volumeLabel}: {volumeValue(active) == null ? "—" : integerFormatter.format(volumeValue(active) ?? 0)}</strong>
-            {showAverage && <em>Average: {active.averagePrice == null ? "—" : compactCurrency(active.averagePrice)}</em>}
-            {showMedian && <em>Median: {active.medianPrice == null ? "—" : compactCurrency(active.medianPrice)}</em>}
+            {showAverage && <em style={{color: "var(--teal)"}}>Average: {active.averagePrice == null ? "—" : compactCurrency(active.averagePrice)}</em>}
+            {showMedian && <em style={{color: "var(--coral)"}}>Median: {active.medianPrice == null ? "—" : compactCurrency(active.medianPrice)}</em>}
           </div>
         )}
       </div>
@@ -238,7 +242,7 @@ function CombinedMarketChart({
             return (
               <g key={tick}>
                 <line className="grid-line" x1={margin.left} x2={width - margin.right} y1={lineY} y2={lineY} />
-                <text className="axis-label" x={margin.left - 12} y={lineY + 4} textAnchor="end">{integerFormatter.format(volumeMax * tick)}</text>
+                <text className="axis-label" x={margin.left - 12} y={lineY + 4} textAnchor="end">{integerFormatter.format(Math.round(volumeMin + (volumeMax - volumeMin) * tick))}</text>
                 <text className="axis-label" x={width - margin.right + 12} y={lineY + 4}>{compactCurrency(priceMin + (priceMax - priceMin) * tick)}</text>
               </g>
             );
@@ -249,6 +253,8 @@ function CombinedMarketChart({
           })}
           {showAverage && <path className="price-series average-series" d={linePath("averagePrice")} />}
           {showMedian && <path className="price-series median-series" d={linePath("medianPrice")} />}
+          {showAverage && lastAvgY != null && <text className="axis-label line-tag" x={width - margin.right - 6} y={lastAvgY - 6} textAnchor="end" fill="var(--teal)" fontWeight="700">Avg</text>}
+          {showMedian && lastMedianY != null && <text className="axis-label line-tag" x={width - margin.right - 6} y={lastMedianY - 6} textAnchor="end" fill="var(--coral)" fontWeight="700">Med</text>}
           {records.map((record, index) => (
             <g key={record.date}>
               <line className={`hover-line ${activeIndex === index ? "active" : ""}`} x1={x(index)} x2={x(index)} y1={margin.top} y2={margin.top + plotHeight} />
