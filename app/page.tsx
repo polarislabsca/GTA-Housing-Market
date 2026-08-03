@@ -44,6 +44,14 @@ const REGION_MEMBERS: { label: string; cities: string[] }[] = [
   { label: "Dufferin County", cities: ["Dufferin County", "Orangeville"] },
 ];
 
+const DATE_PRESETS = [
+  { label: "1Y", years: 1 },
+  { label: "2Y", years: 2 },
+  { label: "3Y", years: 3 },
+  { label: "5Y", years: 5 },
+  { label: "All", years: "all" as const },
+] as const;
+
 function monthLabel(date: string) {
   return monthFormatter.format(new Date(`${date}T00:00:00Z`));
 }
@@ -71,10 +79,40 @@ function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 }
 
+// Aggregate a slice of MarketRecord rows into a single synthetic record (used for "All property types")
+function aggregateMonth(records: MarketRecord[], date: string, city: string): MarketRecord {
+  const sales = records.reduce((sum, r) => sum + r.sales, 0);
+  const weighted = (field: "averagePrice" | "saleToList" | "daysOnMarket"): number | null => {
+    const reported = records.filter((r) => r[field] != null && r.sales > 0);
+    const weight = reported.reduce((sum, r) => sum + r.sales, 0);
+    return weight ? Math.round(reported.reduce((sum, r) => sum + ((r[field] as number) ?? 0) * r.sales, 0) / weight) : null;
+  };
+  const activeValues = records.map((r) => r.activeListings).filter((v): v is number => v != null);
+  const activeListings = activeValues.length ? activeValues.reduce((s, v) => s + v, 0) : null;
+  return {
+    date, city, propertyType: "All property types", sales,
+    averagePrice: weighted("averagePrice"), medianPrice: null, activeListings,
+    monthsOfInventory: activeListings != null && sales > 0 ? Math.round((activeListings / sales) * 100) / 100 : null,
+    saleToList: weighted("saleToList"), daysOnMarket: weighted("daysOnMarket"),
+  };
+}
+
 function Delta({ value, suffix = "vs. period start" }: { value: number | null; suffix?: string }) {
   if (value == null) return <span className="delta neutral">Not available</span>;
   const direction = value > 0.05 ? "up" : value < -0.05 ? "down" : "neutral";
   return <span className={`delta ${direction}`}>{value >= 0 ? "+" : ""}{value.toFixed(1)}% {suffix}</span>;
+}
+
+// Year-over-year comparison shown below the period-change delta
+function YoyDelta({ current, prior }: { current: number | null; prior: number | null }) {
+  const change = percentChange(current, prior);
+  if (change == null) return null;
+  const direction = change > 0.05 ? "up" : change < -0.05 ? "down" : "neutral";
+  return (
+    <span className={`yoy-delta delta ${direction}`}>
+      {change >= 0 ? "+" : ""}{change.toFixed(1)}% year-over-year
+    </span>
+  );
 }
 
 type PriceMode = "average" | "median" | "both";
@@ -244,6 +282,7 @@ export default function Home() {
   const [endDate, setEndDate] = useState("2026-06-01");
   const isGitHubPages = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
 
+  // Restore saved theme preference
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("housing-dashboard-theme");
     const preferredTheme = savedTheme === "light" || savedTheme === "dark"
@@ -253,6 +292,37 @@ export default function Home() {
     document.documentElement.dataset.theme = preferredTheme;
   }, []);
 
+  // Read URL params on mount so filter state can be shared via link
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlCity = params.get("city");
+    const urlType = params.get("type");
+    const urlFrom = params.get("from");
+    const urlTo = params.get("to");
+    const urlPrice = params.get("price");
+    const urlVol = params.get("vol");
+    if (urlCity) setCity(urlCity);
+    if (urlType) setPropertyType(urlType);
+    if (urlFrom && /^\d{4}-\d{2}-01$/.test(urlFrom)) setStartDate(urlFrom);
+    if (urlTo && /^\d{4}-\d{2}-01$/.test(urlTo)) setEndDate(urlTo);
+    if (urlPrice === "average" || urlPrice === "median" || urlPrice === "both") setPriceMode(urlPrice);
+    if (urlVol === "sales" || urlVol === "inventory") setVolumeMode(urlVol);
+  }, []);
+
+  // Keep URL in sync with filter state so the current view is always shareable
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (city !== "All TRREB Areas") params.set("city", city);
+    if (propertyType !== "Detached") params.set("type", propertyType);
+    if (startDate !== "2021-01-01") params.set("from", startDate);
+    if (endDate !== "2026-06-01") params.set("to", endDate);
+    if (priceMode !== "average") params.set("price", priceMode);
+    if (volumeMode !== "sales") params.set("vol", volumeMode);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [city, propertyType, startDate, endDate, priceMode, volumeMode]);
+
+  // Fetch market data
   useEffect(() => {
     fetch("./data/market-data.json")
       .then((response) => {
@@ -265,6 +335,7 @@ export default function Home() {
 
   const months = useMemo(() => data ? [...new Set(data.records.map((record) => record.date))].sort() : [], [data]);
   const years = useMemo(() => [...new Set(months.map((month) => month.slice(0, 4)))], [months]);
+
   const cityGroups = useMemo(() => {
     if (!data) return [];
     const available = new Set(data.cities);
@@ -282,6 +353,7 @@ export default function Home() {
     if (other.length) groups.push({ label: "Other TRREB areas", cities: other });
     return groups;
   }, [data]);
+
   const selected = useMemo(() => {
     if (!data) return [];
     const records = data.records.filter((record) => record.city === city && record.date >= startDate && record.date <= endDate);
@@ -290,22 +362,9 @@ export default function Home() {
     }
     const byMonth = new Map<string, MarketRecord[]>();
     records.forEach((record) => byMonth.set(record.date, [...(byMonth.get(record.date) ?? []), record]));
-    return [...byMonth.entries()].map(([date, monthly]) => {
-      const sales = monthly.reduce((sum, record) => sum + record.sales, 0);
-      const weighted = (field: "averagePrice" | "saleToList" | "daysOnMarket") => {
-        const reported = monthly.filter((record) => record[field] != null && record.sales > 0);
-        const weight = reported.reduce((sum, record) => sum + record.sales, 0);
-        return weight ? Math.round(reported.reduce((sum, record) => sum + (record[field] ?? 0) * record.sales, 0) / weight) : null;
-      };
-      const activeValues = monthly.map((record) => record.activeListings).filter((value): value is number => value != null);
-      const activeListings = activeValues.length ? activeValues.reduce((sum, value) => sum + value, 0) : null;
-      return {
-        date, city, propertyType: "All property types", sales,
-        averagePrice: weighted("averagePrice"), medianPrice: null, activeListings,
-        monthsOfInventory: activeListings != null && sales > 0 ? Math.round((activeListings / sales) * 100) / 100 : null,
-        saleToList: weighted("saleToList"), daysOnMarket: weighted("daysOnMarket"),
-      };
-    }).sort((a, b) => a.date.localeCompare(b.date));
+    return [...byMonth.entries()]
+      .map(([date, monthly]) => aggregateMonth(monthly, date, city))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }, [data, city, propertyType, startDate, endDate]);
 
   const first = selected[0];
@@ -322,6 +381,42 @@ export default function Home() {
   useEffect(() => {
     if (!medianAvailable && priceMode !== "average") setPriceMode("average");
   }, [medianAvailable, priceMode]);
+
+  // Look up the same month from one year prior (from the full dataset, not the date-filtered selection)
+  const yearAgo = useMemo(() => {
+    if (!data || !latest) return null;
+    const latestYear = parseInt(latest.date.slice(0, 4));
+    const yearAgoDate = `${latestYear - 1}-${latest.date.slice(5)}`;
+    if (propertyType !== "All property types") {
+      return data.records.find((r) => r.city === city && r.propertyType === propertyType && r.date === yearAgoDate) ?? null;
+    }
+    const monthly = data.records.filter((r) => r.city === city && r.date === yearAgoDate);
+    return monthly.length ? aggregateMonth(monthly, yearAgoDate, city) : null;
+  }, [data, city, propertyType, latest]);
+
+  // Classify the market based on months of inventory thresholds
+  const marketCondition = useMemo(() => {
+    if (latest?.monthsOfInventory == null) return null;
+    const m = latest.monthsOfInventory;
+    if (m < 3) return { label: "Seller's market", cls: "condition-seller" };
+    if (m < 4) return { label: "Balanced market", cls: "condition-balanced" };
+    return { label: "Buyer's market", cls: "condition-buyer" };
+  }, [latest?.monthsOfInventory]);
+
+  // Which quick-range preset (if any) matches the current date range
+  const activePreset = useMemo(() => {
+    if (!months.length) return null;
+    const last = months[months.length - 1];
+    if (startDate === months[0] && endDate === last) return "All";
+    for (const preset of DATE_PRESETS) {
+      if (preset.years === "all") continue;
+      const lastYear = parseInt(last.slice(0, 4));
+      const targetStart = `${lastYear - preset.years}-${last.slice(5)}`;
+      const from = months.find((m) => m >= targetStart) ?? months[0];
+      if (startDate === from && endDate === last) return preset.label;
+    }
+    return null;
+  }, [months, startDate, endDate]);
 
   const marketSummary = useMemo(() => {
     if (!first || !latest) return [];
@@ -358,6 +453,45 @@ export default function Home() {
     : `${salesChange == null ? "Demand" : salesChange > 1 ? "Demand improved" : salesChange < -1 ? "Demand cooled" : "Demand held steady"}${inventoryChange == null ? "." : inventoryChange > 1 ? " as available supply expanded." : inventoryChange < -1 ? " as available supply moved lower." : " while available supply held steady."}`;
   const inventoryScaleWidth = latest?.monthsOfInventory == null ? "0%" : `${Math.min((latest.monthsOfInventory / 6) * 100, 100)}%`;
 
+  function applyPreset(years: number | "all") {
+    if (!months.length) return;
+    const last = months[months.length - 1];
+    if (years === "all") {
+      updateStart(months[0]);
+      updateEnd(last);
+      return;
+    }
+    const lastYear = parseInt(last.slice(0, 4));
+    const targetStart = `${lastYear - years}-${last.slice(5)}`;
+    const from = months.find((m) => m >= targetStart) ?? months[0];
+    updateStart(from);
+    updateEnd(last);
+  }
+
+  function exportCSV() {
+    if (!selected.length) return;
+    const headers = ["Month", "Units Sold", "Average Price (CAD)", "Median Price (CAD)", "Active Listings", "Months of Inventory", "Avg. Days on Market"];
+    const rows = selected.map((r) => [
+      monthLabel(r.date),
+      r.sales,
+      r.averagePrice ?? "",
+      r.medianPrice ?? "",
+      r.activeListings ?? "",
+      r.monthsOfInventory ?? "",
+      r.daysOnMarket ?? "",
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `gta-housing-${city.replace(/\s+/g, "-").toLowerCase()}-${propertyType.replace(/\s+/g, "-").toLowerCase()}-${startDate.slice(0, 7)}-to-${endDate.slice(0, 7)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   function updateStart(value: string) {
     setStartDate(value);
     if (value > endDate) setEndDate(value);
@@ -382,6 +516,10 @@ export default function Home() {
     window.localStorage.setItem("housing-dashboard-theme", nextTheme);
   }
 
+  // Pull display labels from data metadata so they stay accurate as the dataset grows
+  const updatedLabel = data ? monthLabel(data.metadata.updatedThrough) : "—";
+  const coveragePeriod = data ? `${monthLabel(data.metadata.periodStart)}–${monthLabel(data.metadata.periodEnd)}` : "";
+
   return (
     <main>
       <header className="site-header">
@@ -398,7 +536,7 @@ export default function Home() {
             <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
           {!isGitHubPages && (
-            <a className="dataset-link" href="./data/TRREB_Detached_Dataset_through_2026-06.xlsx" download>
+            <a className="dataset-link" href={data?.metadata.linkedWorkbook ?? "./data/TRREB_Detached_Dataset_through_2026-06.xlsx"} download>
               Download linked Excel data
             </a>
           )}
@@ -413,7 +551,7 @@ export default function Home() {
         </div>
         <div className="coverage-note">
           <span>Updated through</span>
-          <strong>June 2026</strong>
+          <strong>{updatedLabel}</strong>
           <small>Official monthly Market Watch reports</small>
         </div>
       </section>
@@ -461,6 +599,21 @@ export default function Home() {
             {months.filter((month) => month.startsWith(`${endDate.slice(0, 4)}-`)).map((month) => <option key={month} value={month.slice(5, 7)}>{monthOnlyLabel(month)}</option>)}
           </select>
         </label>
+        <div className="preset-group" role="group" aria-label="Date range presets">
+          <span className="preset-label">Quick range</span>
+          {DATE_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className={`preset-btn${activePreset === preset.label ? " active" : ""}`}
+              onClick={() => applyPreset(preset.years)}
+              disabled={!data}
+              aria-pressed={activePreset === preset.label}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
       </section>
 
       {error && <div className="status-message error">{error}</div>}
@@ -482,6 +635,7 @@ export default function Home() {
               <span>{volumeLabel}</span>
               <strong>{latestVolume == null ? "—" : integerFormatter.format(latestVolume)}</strong>
               <Delta value={volumeChange} />
+              <YoyDelta current={latestVolume} prior={volumeMode === "sales" ? yearAgo?.sales ?? null : yearAgo?.activeListings ?? null} />
             </article>
             <article className="kpi">
               <span>{priceMode === "average" ? "Average price" : priceMode === "median" ? "Median price" : "Average and median price"}</span>
@@ -495,16 +649,30 @@ export default function Home() {
                 <strong>{priceMode === "average" ? (latest.averagePrice == null ? "—" : currencyFormatter.format(latest.averagePrice)) : (latest.medianPrice == null ? "—" : currencyFormatter.format(latest.medianPrice))}</strong>
               )}
               {priceMode !== "both" && <Delta value={priceMode === "average" ? priceChange : medianChange} />}
+              <YoyDelta
+                current={priceMode === "median" ? latest.medianPrice : latest.averagePrice}
+                prior={priceMode === "median" ? (yearAgo?.medianPrice ?? null) : (yearAgo?.averagePrice ?? null)}
+              />
             </article>
             <article className="kpi">
               <span>Sale-to-list ratio</span>
               <strong>{latest.saleToList == null ? "—" : `${latest.saleToList}%`}</strong>
               <span className="delta neutral">{propertyType === "All property types" ? "Sales-weighted across property types" : "Latest reported month"}</span>
+              <YoyDelta current={latest.saleToList} prior={yearAgo?.saleToList ?? null} />
             </article>
             <article className="kpi">
               <span>Months of inventory</span>
               <strong>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</strong>
               <span className="delta neutral">Active listings ÷ monthly sales</span>
+              {marketCondition && (
+                <span className={`market-condition-badge ${marketCondition.cls}`}>{marketCondition.label}</span>
+              )}
+            </article>
+            <article className="kpi">
+              <span>Days on market</span>
+              <strong>{latest.daysOnMarket == null ? "—" : integerFormatter.format(latest.daysOnMarket)}</strong>
+              <span className="delta neutral">Avg. listing to sale days</span>
+              <YoyDelta current={latest.daysOnMarket} prior={yearAgo?.daysOnMarket ?? null} />
             </article>
           </section>
 
@@ -522,10 +690,14 @@ export default function Home() {
               <section className="market-balance-card" aria-labelledby="market-balance-title">
                 <p className="eyebrow">Supply vs. demand</p>
                 <h2 id="market-balance-title">Market balance</h2>
+                {marketCondition && (
+                  <div className={`market-condition-label ${marketCondition.cls}`}>{marketCondition.label}</div>
+                )}
                 <div className="inventory-meter" aria-label={latest.monthsOfInventory == null ? "Months of inventory unavailable" : `${latest.monthsOfInventory.toFixed(2)} months of inventory on a display scale from zero to six or more months`}>
                   <span style={{ width: inventoryScaleWidth }} />
                 </div>
                 <div className="inventory-scale-labels"><span>0 months</span><span>3</span><span>6+</span></div>
+                <div className="inventory-zone-labels"><span>Seller's</span><span>Balanced</span><span>Buyer's</span></div>
                 <dl>
                   <div><dt>Active listings</dt><dd>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</dd></div>
                   <div><dt>Months of inventory</dt><dd>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</dd></div>
@@ -537,7 +709,7 @@ export default function Home() {
               <section className="market-briefing-card" aria-labelledby="market-briefing-title">
                 <p className="eyebrow">Automatic analysis</p>
                 <h2 id="market-briefing-title">Signals to watch</h2>
-                {marketSummary.slice(0, 3).map((statement) => <p key={statement}>{statement}</p>)}
+                {marketSummary.map((statement) => <p key={statement}>{statement}</p>)}
               </section>
             </aside>
           </div>
@@ -549,16 +721,26 @@ export default function Home() {
                 <h2>Selected period data</h2>
                 <p className="table-summary">{selected.length} monthly records available</p>
               </div>
-              <button
-                className="detail-toggle"
-                type="button"
-                aria-expanded={showMonthlyDetail}
-                aria-controls="monthly-detail-table"
-                onClick={() => setShowMonthlyDetail((visible) => !visible)}
-              >
-                {showMonthlyDetail ? "Hide monthly detail" : "Show monthly detail"}
-                <span aria-hidden="true">{showMonthlyDetail ? "−" : "+"}</span>
-              </button>
+              <div className="table-actions">
+                <button
+                  className="export-btn"
+                  type="button"
+                  onClick={exportCSV}
+                  title={`Export ${selected.length} months as CSV`}
+                >
+                  Export CSV
+                </button>
+                <button
+                  className="detail-toggle"
+                  type="button"
+                  aria-expanded={showMonthlyDetail}
+                  aria-controls="monthly-detail-table"
+                  onClick={() => setShowMonthlyDetail((visible) => !visible)}
+                >
+                  {showMonthlyDetail ? "Hide monthly detail" : "Show monthly detail"}
+                  <span aria-hidden="true">{showMonthlyDetail ? "−" : "+"}</span>
+                </button>
+              </div>
             </div>
             {showMonthlyDetail && (
               <div id="monthly-detail-table" className="monthly-detail-content">
@@ -594,8 +776,8 @@ export default function Home() {
       {data && selected.length === 0 && <div className="status-message">No reported transactions match this selection.</div>}
 
       <footer>
-        <p>Property-type dashboard coverage: January 2021–June 2026, compiled from official monthly TRREB Market Watch reports.</p>
-        <a href="https://public.trreb.ca/market-data/market-watch/" target="_blank" rel="noreferrer">View official TRREB Market Watch source</a>
+        <p>{data?.metadata.source ?? "TRREB Market Watch monthly reports"}{coveragePeriod ? ` · ${coveragePeriod}` : ""}.</p>
+        <a href={data?.metadata.sourceUrl ?? "https://public.trreb.ca/market-data/market-watch/"} target="_blank" rel="noreferrer">View official TRREB Market Watch source</a>
       </footer>
     </main>
   );
