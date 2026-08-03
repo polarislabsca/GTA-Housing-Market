@@ -275,6 +275,67 @@ function CombinedMarketChart({
   );
 }
 
+function polarPoint(cx: number, cy: number, r: number, fraction: number) {
+  const angle = Math.PI * (1 - fraction);
+  return { x: cx + r * Math.cos(angle), y: cy - r * Math.sin(angle) };
+}
+
+function gaugeArcPath(cx: number, cy: number, r: number, f1: number, f2: number) {
+  const p1 = polarPoint(cx, cy, r, f1);
+  const p2 = polarPoint(cx, cy, r, f2);
+  return `M ${p1.x} ${p1.y} A ${r} ${r} 0 0 1 ${p2.x} ${p2.y}`;
+}
+
+function InventoryGauge({ value }: { value: number | null }) {
+  const cx = 140, cy = 122, r = 92, strokeW = 20;
+  const clamped = value == null ? null : Math.min(Math.max(value, 0), 6);
+  const fraction = clamped == null ? null : clamped / 6;
+  const sellerEnd = 3 / 6;
+  const balancedEnd = 4 / 6;
+  const tickInner = fraction == null ? null : polarPoint(cx, cy, r - strokeW / 2 - 5, fraction);
+  const tickOuter = fraction == null ? null : polarPoint(cx, cy, r + strokeW / 2 + 5, fraction);
+  return (
+    <div className="inventory-gauge">
+      <svg viewBox="0 0 280 148" role="img" aria-label={value == null ? "Months of inventory unavailable" : `${value.toFixed(2)} months of inventory, on a scale from zero to six or more`}>
+        <path d={gaugeArcPath(cx, cy, r, 0, sellerEnd)} className="gauge-arc gauge-seller" strokeWidth={strokeW} fill="none" />
+        <path d={gaugeArcPath(cx, cy, r, sellerEnd, balancedEnd)} className="gauge-arc gauge-balanced" strokeWidth={strokeW} fill="none" />
+        <path d={gaugeArcPath(cx, cy, r, balancedEnd, 1)} className="gauge-arc gauge-buyer" strokeWidth={strokeW} fill="none" />
+        {tickInner && tickOuter && <line x1={tickInner.x} y1={tickInner.y} x2={tickOuter.x} y2={tickOuter.y} className="gauge-needle" />}
+        <text x={cx - r - 2} y={cy + 22} className="gauge-end-label" textAnchor="start">0 mo</text>
+        <text x={cx + r + 2} y={cy + 22} className="gauge-end-label" textAnchor="end">6+ mo</text>
+      </svg>
+      <div className="gauge-readout">
+        <strong>{value == null ? "—" : value.toFixed(2)}</strong>
+        <span>months of inventory</span>
+      </div>
+    </div>
+  );
+}
+
+function InventorySparkline({ records }: { records: MarketRecord[] }) {
+  const points = records.filter((record): record is MarketRecord & { monthsOfInventory: number } => record.monthsOfInventory != null);
+  if (points.length < 2) return null;
+  const width = 280, height = 64, pad = 6;
+  const values = points.map((record) => record.monthsOfInventory);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(max - min, 0.3);
+  const x = (index: number) => pad + (index / (points.length - 1)) * (width - pad * 2);
+  const y = (value: number) => pad + (1 - (value - min) / span) * (height - pad * 2);
+  const path = points.map((record, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(record.monthsOfInventory)}`).join(" ");
+  const first = points[0];
+  const last = points[points.length - 1];
+  return (
+    <div className="inventory-sparkline">
+      <p className="sparkline-caption">Months of inventory · {points.length}-month trend</p>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Months of inventory across the selected period, from ${first.monthsOfInventory.toFixed(1)} to ${last.monthsOfInventory.toFixed(1)}`}>
+        <path d={path} className="sparkline-path" fill="none" />
+        <circle cx={x(points.length - 1)} cy={y(last.monthsOfInventory)} r="3.5" className="sparkline-dot" />
+      </svg>
+    </div>
+  );
+}
+
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
@@ -562,8 +623,6 @@ export default function Home() {
         const conditionPart = marketCondition ? ` — ${marketCondition.label.toLowerCase()}` : "";
         return `${demandPart}${pricePart}${conditionPart}.`;
       })();
-  const inventoryScaleWidth = latest?.monthsOfInventory == null ? "0%" : `${Math.min((latest.monthsOfInventory / 6) * 100, 100)}%`;
-
   function applyPreset(years: number | "all") {
     if (!months.length) return;
     const last = months[months.length - 1];
@@ -803,11 +862,9 @@ export default function Home() {
               {marketCondition && (
                 <div className={`market-condition-label ${marketCondition.cls}`}>{marketCondition.label}</div>
               )}
-              <div className="inventory-meter" aria-label={latest.monthsOfInventory == null ? "Months of inventory unavailable" : `${latest.monthsOfInventory.toFixed(2)} months of inventory on a display scale from zero to six or more months`}>
-                <span style={{ width: inventoryScaleWidth }} />
-              </div>
-              <div className="inventory-scale-labels"><span>0 months</span><span>3</span><span>6+</span></div>
+              <InventoryGauge value={latest.monthsOfInventory} />
               <div className="inventory-zone-labels"><span>Seller's</span><span>Balanced</span><span>Buyer's</span></div>
+              <InventorySparkline records={selected} />
               <dl>
                 <div><dt>Active listings</dt><dd>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</dd></div>
                 <div><dt>Months of inventory</dt><dd>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</dd></div>

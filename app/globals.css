@@ -372,9 +372,25 @@ html[data-theme="dark"] .segmented-control button.active { background: var(--cor
 .market-balance-card { display: flex; flex-direction: column; background: var(--navy-deep); color: #d8f0ee; }
 .market-balance-card .eyebrow { color: #7ac8c4; }
 .market-balance-card h2, .market-briefing-card h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.55rem; letter-spacing: -0.025em; }
-.inventory-meter { height: 14px; margin: 16px 0 8px; background: rgba(255, 255, 255, 0.14); overflow: hidden; border-radius: 3px; }
-.inventory-meter span { display: block; height: 100%; background: var(--coral); transition: width 400ms ease; border-radius: 3px; }
-.inventory-scale-labels { display: flex; justify-content: space-between; color: rgba(216, 240, 238, 0.7); font-size: 0.68rem; text-transform: uppercase; }
+/* Semi-circular gauge visualizing months of inventory (0-6+) */
+.inventory-gauge { margin: 14px 0 0; text-align: center; }
+.inventory-gauge svg { display: block; width: 100%; height: auto; }
+.gauge-arc { stroke-linecap: round; }
+.gauge-seller { stroke: #7dd4b8; }
+.gauge-balanced { stroke: rgba(255, 255, 255, 0.2); }
+.gauge-buyer { stroke: #d4c070; }
+.gauge-needle { stroke: #ffffff; stroke-width: 3; stroke-linecap: round; }
+.gauge-end-label { fill: rgba(216, 240, 238, 0.55); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.gauge-readout { margin-top: -18px; }
+.gauge-readout strong { display: block; font-size: 1.9rem; letter-spacing: -0.04em; }
+.gauge-readout span { display: block; margin-top: 2px; color: rgba(216, 240, 238, 0.62); font-size: 0.76rem; }
+
+/* Compact trend line beneath the gauge, reusing the selected period's data */
+.inventory-sparkline { margin-top: 20px; }
+.sparkline-caption { margin: 0 0 8px; color: rgba(216, 240, 238, 0.55); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.inventory-sparkline svg { display: block; width: 100%; height: auto; }
+.sparkline-path { stroke: #9fdcd8; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.sparkline-dot { fill: #9fdcd8; stroke: var(--navy-deep); stroke-width: 1.5; }
 
 /* Market condition label above the meter (in the dark balance card) */
 .market-condition-label {
@@ -398,8 +414,9 @@ html[data-theme="dark"] .segmented-control button.active { background: var(--cor
   font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-top: 3px;
-  margin-bottom: 4px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 .market-balance-card dl { margin: 22px 0 0; margin-top: auto; }
 .market-balance-card dl div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.14); }
