@@ -722,14 +722,16 @@ export default function Home() {
                 <p className="table-summary">{selected.length} monthly records available</p>
               </div>
               <div className="table-actions">
-                <button
-                  className="export-btn"
-                  type="button"
-                  onClick={exportCSV}
-                  title={`Export ${selected.length} months as CSV`}
-                >
-                  Export CSV
-                </button>
+                {!isGitHubPages && (
+                  <button
+                    className="export-btn"
+                    type="button"
+                    onClick={exportCSV}
+                    title={`Export ${selected.length} months as CSV`}
+                  >
+                    Export CSV
+                  </button>
+                )}
                 <button
                   className="detail-toggle"
                   type="button"
