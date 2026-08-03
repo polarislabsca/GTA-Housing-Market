@@ -367,7 +367,7 @@ html[data-theme="dark"] .segmented-control button.active { background: var(--cor
 .dual-price-value strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: clamp(1.05rem, 1.6vw, 1.5rem); letter-spacing: -0.04em; white-space: nowrap; }
 .dual-price-value small { grid-column: 1 / -1; margin-top: 6px; color: var(--muted); font-size: 0.72rem; word-spacing: 5px; }
 
-.market-workspace { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, 0.7fr); gap: 18px; margin: 18px 0 28px; align-items: stretch; }
+.market-workspace { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, 0.7fr); gap: 18px; margin: 18px 0 28px; align-items: start; }
 .diagnostic-column { display: grid; grid-template-rows: auto 1fr; gap: 16px; }
 .market-balance-card, .market-briefing-card { padding: 24px; border-radius: 6px; }
 .market-balance-card { background: var(--navy-deep); color: #d8f0ee; }
