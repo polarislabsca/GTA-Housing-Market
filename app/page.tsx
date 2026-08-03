@@ -797,42 +797,42 @@ export default function Home() {
               medianAvailable={medianAvailable}
             />
 
-            <aside className="diagnostic-column" aria-label="Market balance and automatic analysis">
-              <section className="market-balance-card" aria-labelledby="market-balance-title">
-                <p className="eyebrow">Supply vs. demand</p>
-                <h2 id="market-balance-title">Market balance</h2>
-                {marketCondition && (
-                  <div className={`market-condition-label ${marketCondition.cls}`}>{marketCondition.label}</div>
-                )}
-                <div className="inventory-meter" aria-label={latest.monthsOfInventory == null ? "Months of inventory unavailable" : `${latest.monthsOfInventory.toFixed(2)} months of inventory on a display scale from zero to six or more months`}>
-                  <span style={{ width: inventoryScaleWidth }} />
+            <section className="market-balance-card" aria-labelledby="market-balance-title">
+              <p className="eyebrow">Supply vs. demand</p>
+              <h2 id="market-balance-title">Market balance</h2>
+              {marketCondition && (
+                <div className={`market-condition-label ${marketCondition.cls}`}>{marketCondition.label}</div>
+              )}
+              <div className="inventory-meter" aria-label={latest.monthsOfInventory == null ? "Months of inventory unavailable" : `${latest.monthsOfInventory.toFixed(2)} months of inventory on a display scale from zero to six or more months`}>
+                <span style={{ width: inventoryScaleWidth }} />
+              </div>
+              <div className="inventory-scale-labels"><span>0 months</span><span>3</span><span>6+</span></div>
+              <div className="inventory-zone-labels"><span>Seller's</span><span>Balanced</span><span>Buyer's</span></div>
+              <dl>
+                <div><dt>Active listings</dt><dd>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</dd></div>
+                <div><dt>Months of inventory</dt><dd>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</dd></div>
+                <div>
+                  <dt>Supply vs. year ago</dt>
+                  <dd>{(() => {
+                    const invChange = percentChange(latest.monthsOfInventory, yearAgo?.monthsOfInventory ?? null);
+                    const listChange = percentChange(latest.activeListings, yearAgo?.activeListings ?? null);
+                    const change = invChange ?? listChange;
+                    if (change == null) return "—";
+                    if (Math.abs(change) < 5) return "Broadly stable";
+                    return change > 0 ? `Expanding (+${change.toFixed(0)}%)` : `Tightening (${change.toFixed(0)}%)`;
+                  })()}</dd>
                 </div>
-                <div className="inventory-scale-labels"><span>0 months</span><span>3</span><span>6+</span></div>
-                <div className="inventory-zone-labels"><span>Seller's</span><span>Balanced</span><span>Buyer's</span></div>
-                <dl>
-                  <div><dt>Active listings</dt><dd>{latest.activeListings == null ? "—" : integerFormatter.format(latest.activeListings)}</dd></div>
-                  <div><dt>Months of inventory</dt><dd>{latest.monthsOfInventory == null ? "—" : latest.monthsOfInventory.toFixed(2)}</dd></div>
-                  <div>
-                    <dt>Supply vs. year ago</dt>
-                    <dd>{(() => {
-                      const invChange = percentChange(latest.monthsOfInventory, yearAgo?.monthsOfInventory ?? null);
-                      const listChange = percentChange(latest.activeListings, yearAgo?.activeListings ?? null);
-                      const change = invChange ?? listChange;
-                      if (change == null) return "—";
-                      if (Math.abs(change) < 5) return "Broadly stable";
-                      return change > 0 ? `Expanding (+${change.toFixed(0)}%)` : `Tightening (${change.toFixed(0)}%)`;
-                    })()}</dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section className="market-briefing-card" aria-labelledby="market-briefing-title">
-                <p className="eyebrow">Automatic analysis</p>
-                <h2 id="market-briefing-title">Signals to watch</h2>
-                {marketSummary.map((statement) => <p key={statement}>{statement}</p>)}
-              </section>
-            </aside>
+              </dl>
+            </section>
           </div>
+
+          <section className="market-briefing-card" aria-labelledby="market-briefing-title">
+            <p className="eyebrow">Automatic analysis</p>
+            <h2 id="market-briefing-title">Signals to watch</h2>
+            <div className="briefing-grid">
+              {marketSummary.map((statement) => <p key={statement}>{statement}</p>)}
+            </div>
+          </section>
 
           <section className="table-section">
             <div className="section-heading">
