@@ -550,15 +550,11 @@ export default function Home() {
           : salesChange > 0 ? `Sales rose ${Math.abs(salesChange).toFixed(0)}%`
           : `Sales fell ${Math.abs(salesChange).toFixed(0)}%`;
         const pricePart = headlinePriceChange == null ? ""
-          : Math.abs(headlinePriceChange) < 1 ? ", with prices holding firm"
-          : headlinePriceChange > 0 ? `, lifting average prices ${Math.abs(headlinePriceChange).toFixed(0)}%`
-          : `, pulling average prices ${Math.abs(headlinePriceChange).toFixed(0)}% lower`;
-        const supplyPart = inventoryChange == null ? ""
-          : Math.abs(inventoryChange) < 5 ? " on stable inventory"
-          : inventoryChange > 0 ? " against a rising supply backdrop"
-          : " as available supply contracted";
+          : Math.abs(headlinePriceChange) < 1 ? ", prices unchanged"
+          : headlinePriceChange > 0 ? `, prices up ${Math.abs(headlinePriceChange).toFixed(0)}%`
+          : `, prices down ${Math.abs(headlinePriceChange).toFixed(0)}%`;
         const conditionPart = marketCondition ? ` — ${marketCondition.label.toLowerCase()}` : "";
-        return `${demandPart}${pricePart}${supplyPart}${conditionPart}.`;
+        return `${demandPart}${pricePart}${conditionPart}.`;
       })();
   const inventoryScaleWidth = latest?.monthsOfInventory == null ? "0%" : `${Math.min((latest.monthsOfInventory / 6) * 100, 100)}%`;
 
