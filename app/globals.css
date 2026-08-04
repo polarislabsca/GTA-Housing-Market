@@ -113,6 +113,24 @@ main { max-width: 1480px; margin: 0 auto; padding: 0 42px 56px; }
 .brand-name { margin: 0 0 3px; font-weight: 700; letter-spacing: -0.01em; }
 .brand-subtitle { margin: 0; color: var(--muted); font-size: 0.79rem; }
 
+.brand-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  border: 1px solid var(--summary-border);
+  color: var(--navy);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+.brand-credit strong { color: var(--ink); font-weight: 800; }
+.brand-credit:hover { border-color: var(--navy); background: var(--surface); transform: translateY(-1px); }
+
 .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 
 .theme-toggle {
@@ -494,7 +512,6 @@ tbody tr:hover { background: var(--row-hover); }
 footer { margin-top: 34px; padding: 24px 0; display: flex; justify-content: space-between; gap: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
 footer p { margin: 0; }
 footer a { color: var(--navy); font-weight: 700; }
-.footer-credit { margin-top: 4px !important; font-weight: 700; color: var(--ink); }
 
 @keyframes reveal-detail {
   from { opacity: 0; transform: translateY(-5px); }

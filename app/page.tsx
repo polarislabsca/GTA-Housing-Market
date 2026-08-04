@@ -760,6 +760,9 @@ export default function Home() {
           <div>
             <p className="brand-name">Toronto Housing Market</p>
             <p className="brand-subtitle">TRREB monthly market intelligence</p>
+            <a className="brand-credit" href="https://polarislabsca.github.io/" target="_blank" rel="noreferrer">
+              Built by <strong>Polaris Labs</strong>
+            </a>
           </div>
         </div>
         <div className="header-actions">
@@ -1019,7 +1022,6 @@ export default function Home() {
       <footer>
         <div>
           <p>{data?.metadata.source ?? "TRREB Market Watch monthly reports"}{coveragePeriod ? ` · ${coveragePeriod}` : ""}.</p>
-          <p className="footer-credit">Built by <a href="https://polarislabsca.github.io/" target="_blank" rel="noreferrer">Polaris Labs</a>.</p>
         </div>
         <a href={data?.metadata.sourceUrl ?? "https://public.trreb.ca/market-data/market-watch/"} target="_blank" rel="noreferrer">View official TRREB Market Watch source</a>
       </footer>
