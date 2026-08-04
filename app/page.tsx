@@ -34,9 +34,8 @@ const monthOnlyFormatter = new Intl.DateTimeFormat("en-CA", { month: "long", tim
 const currencyFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
 const integerFormatter = new Intl.NumberFormat("en-CA", { maximumFractionDigits: 0 });
 
-// Tally.so feedback form. Replace with the real form ID once created —
-// grab it from the form's URL: tally.so/r/[FORM_ID]. See TODO.md.
-const TALLY_FORM_ID = "REPLACE_WITH_TALLY_FORM_ID";
+// Tally.so feedback form: https://tally.so/r/EkGWX2
+const TALLY_FORM_ID = "EkGWX2";
 
 declare global {
   interface Window {
