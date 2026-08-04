@@ -34,6 +34,19 @@ const monthOnlyFormatter = new Intl.DateTimeFormat("en-CA", { month: "long", tim
 const currencyFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
 const integerFormatter = new Intl.NumberFormat("en-CA", { maximumFractionDigits: 0 });
 
+// Tally.so feedback form. Replace with the real form ID once created —
+// grab it from the form's URL: tally.so/r/[FORM_ID]. See TODO.md.
+const TALLY_FORM_ID = "REPLACE_WITH_TALLY_FORM_ID";
+
+declare global {
+  interface Window {
+    Tally?: {
+      openPopup: (formId: string, options?: Record<string, unknown>) => void;
+      closePopup: (formId: string) => void;
+    };
+  }
+}
+
 const REGION_MEMBERS: { label: string; cities: string[] }[] = [
   { label: "Toronto", cities: ["City of Toronto", "Toronto Central", "Toronto East", "Toronto West"] },
   { label: "York Region", cities: ["York Region", "Aurora", "East Gwillimbury", "Georgina", "King", "Markham", "Newmarket", "Richmond Hill", "Stouffville", "Vaughan", "Whitchurch-Stouffville"] },
@@ -383,6 +396,19 @@ export default function Home() {
   const [endDate, setEndDate] = useState("2026-06-01");
   const isGitHubPages = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
 
+  // Load the Tally widget script once, so the feedback button can open a popup form
+  useEffect(() => {
+    if (document.querySelector('script[src="https://tally.so/widgets/embed.js"]')) return;
+    const script = document.createElement("script");
+    script.src = "https://tally.so/widgets/embed.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  function openFeedbackForm() {
+    window.Tally?.openPopup(TALLY_FORM_ID, { layout: "modal", hideTitle: true });
+  }
+
   // Restore saved theme preference
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("housing-dashboard-theme");
@@ -726,6 +752,9 @@ export default function Home() {
 
   return (
     <main>
+      <button type="button" className="feedback-fab" onClick={openFeedbackForm}>
+        Feedback
+      </button>
       <header className="site-header">
         <div className="brand-row">
           <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>

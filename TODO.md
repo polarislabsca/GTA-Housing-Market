@@ -2,6 +2,20 @@
 
 Items noted for later — not yet implemented.
 
+## Feedback button (Tally) — needs a form ID
+
+A floating "Feedback" button is already wired up (`.feedback-fab` in bottom-right, see
+`app/page.tsx` and `app/globals.css`) and opens a Tally popup via `Tally.openPopup(...)`.
+It's inert until a real form ID is set.
+
+**To activate:**
+1. In your Tally account, create a new form for this site (separate from the Tea Master
+   app's form) — e.g. a couple of fields like "Your feedback" and optional "Email".
+2. Copy the Form ID from the form's URL: `tally.so/r/[FORM_ID]`.
+3. In `app/page.tsx`, replace `const TALLY_FORM_ID = "REPLACE_WITH_TALLY_FORM_ID";` with the
+   real ID.
+4. Rebuild and deploy. The button will start opening the real form.
+
 ## Simplified Chinese language toggle
 
 - Add a language switch (English / 简体中文) so the dashboard can be viewed in Simplified Chinese.
