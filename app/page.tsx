@@ -1017,7 +1017,10 @@ export default function Home() {
       {data && selected.length === 0 && <div className="status-message">No reported transactions match this selection.</div>}
 
       <footer>
-        <p>{data?.metadata.source ?? "TRREB Market Watch monthly reports"}{coveragePeriod ? ` · ${coveragePeriod}` : ""}.</p>
+        <div>
+          <p>{data?.metadata.source ?? "TRREB Market Watch monthly reports"}{coveragePeriod ? ` · ${coveragePeriod}` : ""}.</p>
+          <p className="footer-credit">Built by Polaris Labs.</p>
+        </div>
         <a href={data?.metadata.sourceUrl ?? "https://public.trreb.ca/market-data/market-watch/"} target="_blank" rel="noreferrer">View official TRREB Market Watch source</a>
       </footer>
     </main>

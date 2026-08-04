@@ -494,6 +494,7 @@ tbody tr:hover { background: var(--row-hover); }
 footer { margin-top: 34px; padding: 24px 0; display: flex; justify-content: space-between; gap: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
 footer p { margin: 0; }
 footer a { color: var(--navy); font-weight: 700; }
+.footer-credit { margin-top: 4px !important; font-weight: 700; color: var(--ink); }
 
 @keyframes reveal-detail {
   from { opacity: 0; transform: translateY(-5px); }
