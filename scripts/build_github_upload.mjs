@@ -22,12 +22,12 @@ html = html
   .replace("</head>", () => `<style>${style}</style></head>`)
   .replace("</body>", () => `<script type="module">${script
     .replaceAll("./data/market-data.json", "./market-data.json")
-    .replaceAll("./data/TRREB_Detached_Dataset_through_2026-06.xlsx", "./TRREB_Detached_Dataset_through_2026-06.xlsx")}</script></body>`);
+    .replaceAll("./data/TRREB_Detached_Dataset_through_2026-07.xlsx", "./TRREB_Detached_Dataset_through_2026-07.xlsx")}</script></body>`);
 
 await mkdir(output, { recursive: true });
 await Promise.all([
   writeFile(resolve(output, "index.html"), html),
   copyFile(resolve(root, "public/data/market-data.json"), resolve(output, "market-data.json")),
-  copyFile(resolve(root, "public/data/TRREB_Detached_Dataset_through_2026-06.xlsx"), resolve(output, "TRREB_Detached_Dataset_through_2026-06.xlsx")),
+  copyFile(resolve(root, "public/data/TRREB_Detached_Dataset_through_2026-07.xlsx"), resolve(output, "TRREB_Detached_Dataset_through_2026-07.xlsx")),
   copyFile(resolve(root, "public/og.png"), resolve(output, "og.png")),
 ]);

@@ -126,7 +126,7 @@ def main():
         (year, month)
         for year in range(2021, 2027)
         for month in range(1, 13)
-        if year < 2026 or month <= 6
+        if year < 2026 or month <= 7
     ]
     for year, month in report_months:
         pdf_path = PDF_DIR / f"mw{year % 100:02d}{month:02d}.pdf"
@@ -173,12 +173,12 @@ def main():
     payload = {
         "metadata": {
             "title": "TRREB Housing Market Dashboard",
-            "updatedThrough": "2026-06-01",
+            "updatedThrough": "2026-07-01",
             "periodStart": "2021-01-01",
-            "periodEnd": "2026-06-01",
+            "periodEnd": "2026-07-01",
             "source": "Official TRREB Market Watch monthly reports",
             "sourceUrl": "https://public.trreb.ca/market-data/market-watch/",
-            "linkedWorkbook": "/data/TRREB_Detached_Dataset_through_2026-06.xlsx",
+            "linkedWorkbook": "/data/TRREB_Detached_Dataset_through_2026-07.xlsx",
         },
         "cities": cities,
         "propertyTypes": list(PROPERTY_PAGES.keys()),

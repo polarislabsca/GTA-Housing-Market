@@ -392,7 +392,7 @@ export default function Home() {
   const [city, setCity] = useState("All TRREB Areas");
   const [propertyType, setPropertyType] = useState("Detached");
   const [startDate, setStartDate] = useState("2021-01-01");
-  const [endDate, setEndDate] = useState("2026-06-01");
+  const [endDate, setEndDate] = useState("2026-07-01");
   const isGitHubPages = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
 
   // Load the Tally widget script once, so the feedback button can open a popup form
@@ -441,7 +441,7 @@ export default function Home() {
     if (city !== "All TRREB Areas") params.set("city", city);
     if (propertyType !== "Detached") params.set("type", propertyType);
     if (startDate !== "2021-01-01") params.set("from", startDate);
-    if (endDate !== "2026-06-01") params.set("to", endDate);
+    if (endDate !== "2026-07-01") params.set("to", endDate);
     if (priceMode !== "average") params.set("price", priceMode);
     if (volumeMode !== "sales") params.set("vol", volumeMode);
     const qs = params.toString();
@@ -771,7 +771,7 @@ export default function Home() {
             <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
           {!isGitHubPages && (
-            <a className="dataset-link" href={data?.metadata.linkedWorkbook ?? "./data/TRREB_Detached_Dataset_through_2026-06.xlsx"} download>
+            <a className="dataset-link" href={data?.metadata.linkedWorkbook ?? "./data/TRREB_Detached_Dataset_through_2026-07.xlsx"} download>
               Download linked Excel data
             </a>
           )}
