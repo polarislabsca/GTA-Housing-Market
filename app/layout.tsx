@@ -18,14 +18,14 @@ export async function generateMetadata(): Promise<Metadata> {
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
     openGraph: {
       title: "Toronto Housing Market Dashboard",
-      description: "Interactive TRREB sales and price trends through June 2026.",
+      description: "Interactive TRREB sales and price trends through July 2026.",
       type: "website",
       images: [{ url: `${origin}/og.png`, width: 1536, height: 1024, alt: "Toronto Housing Market Dashboard" }],
     },
     twitter: {
       card: "summary_large_image",
       title: "Toronto Housing Market Dashboard",
-      description: "Interactive TRREB sales and price trends through June 2026.",
+      description: "Interactive TRREB sales and price trends through July 2026.",
       images: [`${origin}/og.png`],
     },
   };
