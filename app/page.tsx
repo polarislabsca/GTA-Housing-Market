@@ -473,7 +473,14 @@ export default function Home() {
         if (included) assigned.add(candidate);
         return included;
       });
-      return { ...group, cities };
+      // The whole-region rollup (e.g. "Durham Region", "City of Toronto") is always the
+      // first entry in a group's member list. Move it to the end of the dropdown list
+      // instead of leaving it wherever it falls alphabetically among the municipalities.
+      const wholeRegion = group.cities[0];
+      const ordered = cities.includes(wholeRegion)
+        ? [...cities.filter((candidate) => candidate !== wholeRegion), wholeRegion]
+        : cities;
+      return { ...group, cities: ordered };
     }).filter((group) => group.cities.length > 0);
     const other = [...available].filter((candidate) => !assigned.has(candidate));
     if (other.length) groups.push({ label: "Other TRREB areas", cities: other });
