@@ -20,15 +20,17 @@ from generate_dashboard_data import OUTPUT, PDF_DIR, PROJECT, PROPERTY_PAGES, cl
 
 DATA_DIR = OUTPUT.parent
 SOURCE_URL = "https://trreb.ca/wp-content/files/market-stats/market-watch/mw{yymm}.pdf"
+# Older reports use "Whitchurch-Stouffville" and "Bradford West Gwillimbury"; newer ones the short names.
 REGION_MEMBERS = {
     "Halton Region": ["Burlington", "Halton Hills", "Milton", "Oakville"],
     "Peel Region": ["Brampton", "Caledon", "Mississauga"],
     "City of Toronto": ["Toronto West", "Toronto Central", "Toronto East"],
     "York Region": ["Aurora", "East Gwillimbury", "Georgina", "King", "Markham", "Newmarket",
-                    "Richmond Hill", "Stouffville", "Vaughan"],
+                    "Richmond Hill", "Stouffville", "Whitchurch-Stouffville", "Vaughan"],
     "Durham Region": ["Ajax", "Brock", "Clarington", "Oshawa", "Pickering", "Scugog", "Uxbridge", "Whitby"],
     "Dufferin County": ["Orangeville"],
-    "Simcoe County": ["Adjala-Tosorontio", "Bradford", "Essa", "Innisfil", "New Tecumseth"],
+    "Simcoe County": ["Adjala-Tosorontio", "Bradford", "Bradford West Gwillimbury", "Essa", "Innisfil",
+                      "New Tecumseth"],
 }
 DISTRICT_PREFIX = {"Toronto West": "W", "Toronto Central": "C", "Toronto East": "E"}
 
