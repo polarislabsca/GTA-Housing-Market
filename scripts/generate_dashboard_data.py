@@ -80,7 +80,59 @@ def extract_cell(page, row_top, x0, x1):
     return visible_run(chars)
 
 
+# Reports from September 2026 use a larger page and a cleaner table: each area is one
+# text line, so they are parsed line by line instead of by column position.
+NEW_FORMAT_ROW = re.compile(
+    r"^(?P<city>.+?)\s+(?P<sales>-|[\d,]+)\s+(?P<dollarVolume>-|\$[\d,]+)\s+(?P<averagePrice>-|\$[\d,]+)"
+    r"\s+(?P<medianPrice>-|\$[\d,]+)\s+(?P<newListings>-|[\d,]+)\s+(?P<activeListings>-|[\d,]+)"
+    r"\s+(?P<saleToList>-|\d+%)\s+(?P<daysOnMarket>-|[\d,]+)$"
+)
+# Areas with no sales list only sales (0), new listings, and active listings.
+NEW_FORMAT_ZERO_ROW = re.compile(r"^(?P<city>.+?)\s+0\s+(?P<newListings>[\d,]+)\s+(?P<activeListings>[\d,]+)$")
+
+
+def is_new_format(page):
+    return page.width > 1000
+
+
+def extract_page_lines(page, year, month, property_type, scope):
+    # The report font drops the "ti" ligature (e.g. "Adjala-Tosoron\x00o"); restore it.
+    text = (page.extract_text() or "").replace("\x00", "ti")
+    records, seen = [], set()
+    for line in text.split("\n"):
+        match = NEW_FORMAT_ROW.match(line) or NEW_FORMAT_ZERO_ROW.match(line)
+        if not match:
+            continue
+        row = match.groupdict()
+        city = "All TRREB Areas" if row["city"] in {"TREB Total", "TRREB Total"} else row["city"]
+        if city in seen:
+            continue
+        seen.add(city)
+        sales = clean_number(row.get("sales", "0"))
+        active = clean_number(row["activeListings"])
+        records.append({
+            "date": f"{year}-{month:02d}-01",
+            "year": year,
+            "month": month,
+            "city": city,
+            "scope": scope,
+            "propertyType": property_type,
+            "sales": sales,
+            "dollarVolume": clean_number(row.get("dollarVolume")),
+            "averagePrice": clean_number(row.get("averagePrice")),
+            "medianPrice": clean_number(row.get("medianPrice")),
+            "newListings": clean_number(row["newListings"]),
+            "activeListings": active,
+            "monthsOfInventory": round(active / sales, 2) if active is not None and sales else None,
+            "saleToList": clean_number(row.get("saleToList")),
+            "daysOnMarket": clean_number(row.get("daysOnMarket")),
+        })
+    return records
+
+
 def extract_page(page, year, month, property_type, scope):
+    if is_new_format(page):
+        return extract_page_lines(page, year, month, property_type, scope)
     cell_bands = LEGACY_CELL_BANDS if year < 2022 or (year == 2022 and month <= 4) else CELL_BANDS
     row_tops = {}
     for char in page.chars:
@@ -126,7 +178,7 @@ def main():
         (year, month)
         for year in range(2021, 2027)
         for month in range(1, 13)
-        if year < 2026 or month <= 8
+        if year < 2026 or month <= 9
     ]
     for year, month in report_months:
         pdf_path = PDF_DIR / f"mw{year % 100:02d}{month:02d}.pdf"
@@ -173,12 +225,12 @@ def main():
     payload = {
         "metadata": {
             "title": "TRREB Housing Market Dashboard",
-            "updatedThrough": "2026-08-01",
+            "updatedThrough": "2026-09-01",
             "periodStart": "2021-01-01",
-            "periodEnd": "2026-08-01",
+            "periodEnd": "2026-09-01",
             "source": "Official TRREB Market Watch monthly reports",
             "sourceUrl": "https://public.trreb.ca/market-data/market-watch/",
-            "linkedWorkbook": "/data/TRREB_Detached_Dataset_through_2026-08.xlsx",
+            "linkedWorkbook": "/data/TRREB_Detached_Dataset_through_2026-09.xlsx",
         },
         "cities": cities,
         "propertyTypes": list(PROPERTY_PAGES.keys()),
