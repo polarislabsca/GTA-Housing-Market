@@ -1,250 +1,64 @@
+"""Rebuild public/data/market-data.json from every TRREB Market Watch PDF.
+
+Usage: python scripts/generate_dashboard_data.py
+
+Takes a few minutes for all reports. Prints every check that fails; for adding a single
+new month, use add_month.py instead.
+"""
 import json
-import re
-from pathlib import Path
 
-import pdfplumber
+from trreb_extract import PDF_DIR, PROJECT, PROPERTY_PAGES, check, extract_month, unique_rows
 
-
-PROJECT = Path("/Users/leoma/Claude/Projects/Toronto Housing Market")
-PDF_DIR = PROJECT / "TRREB"
 OUTPUT = PROJECT / "dashboard/public/data/market-data.json"
-
-PROPERTY_PAGES = {
-    "Detached": (6, 7),
-    "Semi-Detached": (8, 9),
-    "Townhouse": (10, 11),
-    "Condo Townhouse": (12, 13),
-    "Condo Apartment": (14, 15),
-    "Link": (16, 17),
-    "Co-Op Apartment": (18, 19),
-    "Detached Condo": (20, 21),
-    "Co-Ownership Apartment": (22, 23),
-}
-
-CELL_BANDS = {
-    "city": (0, 120),
-    "sales": (120, 180),
-    "dollarVolume": (180, 280),
-    "averagePrice": (280, 370),
-    "medianPrice": (370, 460),
-    "newListings": (460, 540),
-    "activeListings": (540, 630),
-    "saleToList": (630, 700),
-    "daysOnMarket": (700, 780),
-}
-
-# Reports through April 2022 used a wider table with different column positions.
-LEGACY_CELL_BANDS = {
-    "city": (0, 130),
-    "sales": (130, 210),
-    "dollarVolume": (210, 310),
-    "averagePrice": (310, 390),
-    "medianPrice": (390, 480),
-    "newListings": (480, 550),
-    "activeListings": (550, 630),
-    "saleToList": (630, 720),
-    "daysOnMarket": (720, 810),
-}
+RECORD_KEYS = ("date", "city", "propertyType", "sales", "averagePrice", "medianPrice",
+               "activeListings", "monthsOfInventory", "saleToList", "daysOnMarket")
 
 
-def visible_run(chars):
-    runs, current, previous_x = [], [], None
-    for char in chars:
-        x0 = char["x0"]
-        if previous_x is not None and x0 < previous_x - 0.5:
-            if current:
-                runs.append(current)
-            current = []
-        current.append(char.get("text", ""))
-        previous_x = x0
-    if current:
-        runs.append(current)
-    values = [re.sub(r"\s+", " ", "".join(run).replace("\t", " ")).strip() for run in runs]
-    values = [value for value in values if value]
-    return values[-1] if values else ""
+def report_months():
+    months = []
+    for path in sorted(PDF_DIR.glob("mw[0-9][0-9][0-9][0-9].pdf")):
+        year, month = 2000 + int(path.stem[2:4]), int(path.stem[4:6])
+        if year >= 2021:
+            months.append((year, month))
+    return months
 
 
-def clean_number(value):
-    cleaned = re.sub(r"[^0-9.\-]", "", value or "")
-    if not cleaned or cleaned == "-":
-        return None
-    number = float(cleaned)
-    return int(number) if number.is_integer() else round(number, 2)
-
-
-def extract_cell(page, row_top, x0, x1):
-    chars = [
-        char for char in page.chars
-        if x0 <= char["x0"] < x1 and abs(char["top"] - row_top) <= 2.0
-    ]
-    return visible_run(chars)
-
-
-# Reports from September 2026 use a larger page and a cleaner table: each area is one
-# text line, so they are parsed line by line instead of by column position.
-NEW_FORMAT_ROW = re.compile(
-    r"^(?P<city>.+?)\s+(?P<sales>-|[\d,]+)\s+(?P<dollarVolume>-|\$[\d,]+)\s+(?P<averagePrice>-|\$[\d,]+)"
-    r"\s+(?P<medianPrice>-|\$[\d,]+)\s+(?P<newListings>-|[\d,]+)\s+(?P<activeListings>-|[\d,]+)"
-    r"\s+(?P<saleToList>-|\d+%)\s+(?P<daysOnMarket>-|[\d,]+)$"
-)
-# Areas with no sales list only sales (0), new listings, and active listings.
-NEW_FORMAT_ZERO_ROW = re.compile(r"^(?P<city>.+?)\s+0\s+(?P<newListings>[\d,]+)\s+(?P<activeListings>[\d,]+)$")
-
-
-def is_new_format(page):
-    return page.width > 1000
-
-
-def extract_page_lines(page, year, month, property_type, scope):
-    # The report font drops the "ti" ligature (e.g. "Adjala-Tosoron\x00o"); restore it.
-    text = (page.extract_text() or "").replace("\x00", "ti")
-    records, seen = [], set()
-    for line in text.split("\n"):
-        match = NEW_FORMAT_ROW.match(line) or NEW_FORMAT_ZERO_ROW.match(line)
-        if not match:
-            continue
-        row = match.groupdict()
-        city = "All TRREB Areas" if row["city"] in {"TREB Total", "TRREB Total"} else row["city"]
-        if city in seen:
-            continue
-        seen.add(city)
-        sales = clean_number(row.get("sales", "0"))
-        active = clean_number(row["activeListings"])
-        records.append({
-            "date": f"{year}-{month:02d}-01",
-            "year": year,
-            "month": month,
-            "city": city,
-            "scope": scope,
-            "propertyType": property_type,
-            "sales": sales,
-            "dollarVolume": clean_number(row.get("dollarVolume")),
-            "averagePrice": clean_number(row.get("averagePrice")),
-            "medianPrice": clean_number(row.get("medianPrice")),
-            "newListings": clean_number(row["newListings"]),
-            "activeListings": active,
-            "monthsOfInventory": round(active / sales, 2) if active is not None and sales else None,
-            "saleToList": clean_number(row.get("saleToList")),
-            "daysOnMarket": clean_number(row.get("daysOnMarket")),
-        })
-    return records
-
-
-def extract_page(page, year, month, property_type, scope):
-    if is_new_format(page):
-        return extract_page_lines(page, year, month, property_type, scope)
-    cell_bands = LEGACY_CELL_BANDS if year < 2022 or (year == 2022 and month <= 4) else CELL_BANDS
-    row_tops = {}
-    for char in page.chars:
-        if 80 <= char["top"] <= 590 and char["x0"] < cell_bands["city"][1] and char["text"].strip():
-            row_tops[round(char["top"], 1)] = char["top"]
-
-    records, seen = [], set()
-    for row_top in sorted(row_tops.values()):
-        city = extract_cell(page, row_top, *cell_bands["city"])
-        city = "All TRREB Areas" if city in {"TREB Total", "TRREB Total"} else city
-        sales = clean_number(extract_cell(page, row_top, *cell_bands["sales"]))
-        if not city or not re.search(r"[A-Za-z]", city) or sales is None or city in seen:
-            continue
-        seen.add(city)
-        row = {
-            key: extract_cell(page, row_top, *band)
-            for key, band in cell_bands.items()
-            if key != "city"
-        }
-        active = clean_number(row["activeListings"])
-        records.append({
-            "date": f"{year}-{month:02d}-01",
-            "year": year,
-            "month": month,
-            "city": city,
-            "scope": scope,
-            "propertyType": property_type,
-            "sales": sales,
-            "averagePrice": clean_number(row["averagePrice"]),
-            "medianPrice": clean_number(row["medianPrice"]),
-            "newListings": clean_number(row["newListings"]),
-            "activeListings": active,
-            "monthsOfInventory": round(active / sales, 2) if active is not None and sales else None,
-            "saleToList": clean_number(row["saleToList"]),
-            "daysOnMarket": clean_number(row["daysOnMarket"]),
-        })
-    return records
-
-
-def main():
-    records = []
-    report_months = [
-        (year, month)
-        for year in range(2021, 2027)
-        for month in range(1, 13)
-        if year < 2026 or month <= 9
-    ]
-    for year, month in report_months:
-        pdf_path = PDF_DIR / f"mw{year % 100:02d}{month:02d}.pdf"
-        try:
-            with pdfplumber.open(pdf_path) as pdf:
-                for property_type, (all_page, toronto_page) in PROPERTY_PAGES.items():
-                    records.extend(extract_page(pdf.pages[all_page], year, month, property_type, "ALL TRREB"))
-                    records.extend(extract_page(pdf.pages[toronto_page], year, month, property_type, "City of Toronto"))
-        except Exception as error:
-            raise RuntimeError(f"Could not process {pdf_path.name}") from error
-
-    # The Toronto breakdown repeats four aggregate rows. Prefer the ALL TRREB version.
-    deduped = {}
-    for record in records:
-        key = (record["date"], record["city"], record["propertyType"])
-        current = deduped.get(key)
-        if current is None or (current["scope"] == "City of Toronto" and record["scope"] == "ALL TRREB"):
-            deduped[key] = record
-
-    required = {
-        (f"{year}-{month:02d}-01", property_type)
-        for year, month in report_months
-        for property_type in PROPERTY_PAGES
-    }
-    available = {
-        (record["date"], record["propertyType"])
-        for record in deduped.values()
-        if record["city"] == "All TRREB Areas"
-    }
-    missing = sorted(required - available)
-    if missing:
-        raise RuntimeError(f"Missing All TRREB coverage: {missing[:10]}")
-
-    final_records = []
-    for item in sorted(deduped.values(), key=lambda value: (value["date"], value["city"], value["propertyType"])):
-        final_records.append({
-            key: item[key]
-            for key in (
-                "date", "city", "propertyType", "sales", "averagePrice", "medianPrice",
-                "activeListings", "monthsOfInventory", "saleToList", "daysOnMarket",
-            )
-        })
-    cities = sorted({row["city"] for row in final_records}, key=lambda value: (value != "All TRREB Areas", value))
+def write_payload(records):
+    records = sorted(records, key=lambda r: (r["date"], r["city"], r["propertyType"]))
+    latest = records[-1]["date"]
     payload = {
         "metadata": {
             "title": "TRREB Housing Market Dashboard",
-            "updatedThrough": "2026-09-01",
-            "periodStart": "2021-01-01",
-            "periodEnd": "2026-09-01",
+            "updatedThrough": latest,
+            "periodStart": records[0]["date"],
+            "periodEnd": latest,
             "source": "Official TRREB Market Watch monthly reports",
             "sourceUrl": "https://public.trreb.ca/market-data/market-watch/",
-            "linkedWorkbook": "/data/TRREB_Detached_Dataset_through_2026-09.xlsx",
+            "linkedWorkbook": f"/data/TRREB_Detached_Dataset_through_{latest[:7]}.xlsx",
         },
-        "cities": cities,
+        "cities": sorted({r["city"] for r in records}, key=lambda c: (c != "All TRREB Areas", c)),
         "propertyTypes": list(PROPERTY_PAGES.keys()),
-        "records": final_records,
+        "records": [{key: r[key] for key in RECORD_KEYS} for r in records],
     }
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(payload, separators=(",", ":")))
-    print(json.dumps({
-        "records": len(final_records),
-        "cities": len(cities),
-        "propertyTypes": len(PROPERTY_PAGES),
-        "first": final_records[0],
-        "last": final_records[-1],
-    }, indent=2))
+    return payload
+
+
+def main():
+    records, failures = [], 0
+    for year, month in report_months():
+        data = extract_month(year, month)
+        problems = check(data)
+        extraction = [message for kind, message in problems if kind == "extraction"]
+        failures += len(extraction)
+        print(f"{year}-{month:02d}: {len(data['records'])} rows, {len(extraction)} failed checks, "
+              f"{len(problems) - len(extraction)} notes about the report itself", flush=True)
+        for kind, message in problems:
+            print(f"    [{kind}] {message}")
+        records += unique_rows(data["records"]).values()
+    payload = write_payload(records)
+    print(f"Wrote {len(payload['records'])} records through {payload['metadata']['updatedThrough'][:7]}; "
+          f"{failures} failed checks in total.")
 
 
 if __name__ == "__main__":
