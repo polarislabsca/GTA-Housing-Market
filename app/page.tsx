@@ -77,10 +77,18 @@ type LatestLetter = { month: string; en: { title: string; summary?: string; path
 // On the site itself and on this computer the link is relative; anywhere else (a shared test copy)
 // it points at the public site.
 const LIVE_SITE = "https://polarislabsca.github.io/GTA-Housing-Market/";
+
+// Addresses: the English dashboard is the site's front page and the Chinese one is the same page
+// at zh/ (github-pages/index.html switches this on; the build writes zh/index.html). SITE_BASE is
+// the front page's folder, worked out once when the page loads, so data files and links resolve
+// the same way from either address and after the language is switched.
+const LANG_PATHS = typeof document !== "undefined" && document.documentElement.dataset.langPaths === "on";
+const OPENED_IN_CHINESE = LANG_PATHS && /\/zh\/(index\.html)?$/.test(window.location.pathname);
+const SITE_BASE = typeof document === "undefined" ? "./" : new URL(OPENED_IN_CHINESE ? "../" : "./", document.baseURI).href;
 function siteHref(path: string) {
   if (typeof window === "undefined") return `./${path}`;
   const host = window.location.hostname;
-  return host.endsWith("github.io") || host === "localhost" || host === "127.0.0.1" ? `./${path}` : LIVE_SITE + path;
+  return host.endsWith("github.io") || host === "localhost" || host === "127.0.0.1" ? SITE_BASE + path : LIVE_SITE + path;
 }
 
 // Browser storage and the address bar can be unavailable (private windows, embedded previews).
@@ -738,7 +746,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [locale, setLocale] = useState<Locale>("en");
+  const [locale, setLocale] = useState<Locale>(OPENED_IN_CHINESE ? "zh" : "en");
   const s = STRINGS[locale];
   const [showMonthlyDetail, setShowMonthlyDetail] = useState(false);
   const [priceMode, setPriceMode] = useState<PriceMode>("average");
@@ -779,11 +787,19 @@ export default function Home() {
     document.documentElement.dataset.theme = preferredTheme;
   }, []);
 
-  // Restore saved language preference
+  // Language: the zh/ address is always Chinese. The front page is English unless the visitor
+  // chose Chinese before, in which case it moves to the zh/ address (the Advanced home does the same).
   useEffect(() => {
-    const savedLocale = readStored("housing-dashboard-locale");
-    if (savedLocale === "en" || savedLocale === "zh") setLocale(savedLocale);
+    if (!OPENED_IN_CHINESE && readStored("housing-dashboard-locale") === "zh") setLocale("zh");
   }, []);
+
+  // Switching language moves between the two addresses without a reload, so the tab title and
+  // the page's language tag follow along (they match what index.html and zh/index.html say).
+  useEffect(() => {
+    if (!LANG_PATHS) return;
+    document.title = locale === "zh" ? "多伦多房地产市场数据看板" : "Toronto Housing Market Dashboard";
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  }, [locale]);
 
   // Read URL params on mount so filter state can be shared via link
   useEffect(() => {
@@ -812,12 +828,13 @@ export default function Home() {
     if (priceMode !== "average") params.set("price", priceMode);
     if (volumeMode !== "sales") params.set("vol", volumeMode);
     const qs = params.toString();
-    try { window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname); } catch { /* the link just isn't updated */ }
-  }, [city, propertyType, startDate, endDate, priceMode, volumeMode]);
+    const path = LANG_PATHS ? new URL(locale === "zh" ? "zh/" : "", SITE_BASE).pathname : window.location.pathname;
+    try { window.history.replaceState(null, "", qs ? `${path}?${qs}` : path); } catch { /* the link just isn't updated */ }
+  }, [city, propertyType, startDate, endDate, priceMode, volumeMode, locale]);
 
   // The newest market letter's headline, for the line above the briefing
   useEffect(() => {
-    fetch("./data/latest-letter.json")
+    fetch(SITE_BASE + "data/latest-letter.json")
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: LatestLetter | null) => setLetter(payload))
       .catch(() => setLetter(null));
@@ -832,7 +849,7 @@ export default function Home() {
 
   // Fetch market data
   useEffect(() => {
-    fetch("./data/market-data.json")
+    fetch(SITE_BASE + "data/market-data.json")
       .then((response) => {
         if (!response.ok) throw new Error("The market data could not be loaded.");
         return response.json();

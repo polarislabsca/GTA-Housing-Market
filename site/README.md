@@ -7,6 +7,11 @@ The public site at https://polarislabsca.github.io/GTA-Housing-Market/ has two p
   Advanced button: a page for every area and home type, every monthly market letter, and the
   buyer tools, in English and Chinese. Their "← Dashboard" link goes back.
 
+Addresses follow one rule: English has no language folder and Chinese adds `zh/`. So the
+dashboard is `/` and `/zh/` (the same app; `vite.github.config.ts` writes `zh/index.html` and
+`app/page.tsx` reads the address), and an Advanced page is `/advanced/<page>/` and
+`/advanced/zh/<page>/`. Language is never a `?lang=` query.
+
 Until November 2026 it was the other way round (these pages at the root, the dashboard at
 `/legacy/`). The 404 page sends those old addresses to their new place.
 

@@ -136,7 +136,8 @@ const stateOf=m=>m==null?null:m<3?"seller":m>=4?"buyer":"balanced";
 const chip=m=>{const s=stateOf(m);return s?`<span class="chip ${s}"><span class="dot"></span>${T()[s]}</span>`:""};
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 // These pages are the dashboard's Advanced mode and sit one folder below it.
-const home=()=>BASE.replace(/advanced\/$/,"");
+// The dashboard: the site's front page in English, the same page under zh/ in Chinese.
+const home=()=>BASE.replace(/advanced\/$/,"")+(lang==="zh"?"zh/":"");
 const h=r=>BASE+(lang==="zh"?"zh/":"")+pathFor(r);
 const langHref=()=>BASE+(lang==="zh"?"":"zh/")+pathFor(ROUTE);
 const seg=(id,items,pressed)=>`<div class="seg" id="${id}">${items.map(([v,l])=>`<button type="button" data-v="${v}" aria-pressed="${pressed(v)}">${l}</button>`).join("")}</div>`;
@@ -645,7 +646,7 @@ const TOUR_TARGETS=["#pick","#homeLetter",'[data-tour="nav-afford"]','[data-tour
 let tourStep=-1;
 const LANG_KEY="gta-lang";
 const savedLang=()=>{try{return localStorage.getItem(LANG_KEY)}catch(e){return null}};
-const saveLang=l=>{try{localStorage.setItem(LANG_KEY,l)}catch(e){}};
+const saveLang=l=>{try{localStorage.setItem(LANG_KEY,l);localStorage.setItem("housing-dashboard-locale",l)}catch(e){}};
 // First visit: greet in both languages and let the visitor pick one; the tour then runs in that language.
 function showWelcome(){
   if(tourSeen()||$("welcome"))return;
@@ -745,8 +746,6 @@ function boot(){
   if(ROUTE==="home"&&lang==="en"){
     if(savedLang()==="zh"){location.replace(BASE+"zh/");return}
   }
-  // The dashboard opens in whichever language was last read here.
-  try{localStorage.setItem("housing-dashboard-locale",lang)}catch(e){}
   try{if(sessionStorage.getItem("gta-start-tour")==="1"){sessionStorage.removeItem("gta-start-tour");if(ROUTE==="home")tourStep=0}}catch(e){}
   $("langBtn").onclick=()=>{saveLang(lang==="zh"?"en":"zh");location.href=langHref()};
   addEventListener("resize",replaceTour);addEventListener("scroll",replaceTour,{passive:true});
