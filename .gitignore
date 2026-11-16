@@ -43,3 +43,5 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+site/test-bundle/
+/public/data/latest-letter.json

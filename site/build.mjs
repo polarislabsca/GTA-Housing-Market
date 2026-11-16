@@ -4,66 +4,30 @@
 //
 // Every page (each area and home type, each monthly letter, the tools) is written as its own
 // HTML file in English and Chinese, with its content pre-rendered from the same code the
-// browser runs, so it can be read and indexed without JavaScript. The original dashboard,
-// built separately into github-dist/, is copied in at /legacy/.
+// browser runs, so it can be read and indexed without JavaScript.
+//
+// The dashboard (built separately into github-dist/) is the front page of the site. These pages
+// are its "Advanced" mode and live under /advanced/. Addresses from before the swap (/letters/…,
+// /areas/…, /legacy/) are sent to their new place by the 404 page.
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { areaRoutes, letterFeedItem, renderPage, routeHelpers } from "./src/app.js";
+import { siteData } from "./site-data.mjs";
 
 const SITE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SITE, "..");
-const OUT = join(SITE, "dist");
-const BASE = "/GTA-Housing-Market/";
+const DIST = join(SITE, "dist");
+const HOME = "/GTA-Housing-Market/"; // the dashboard
+const ADVANCED = "advanced/";
+const BASE = HOME + ADVANCED; // these pages
+const OUT = join(DIST, ADVANCED);
 const ORIGIN = "https://polarislabsca.github.io";
-const HOME_TYPES = ["Detached", "Semi-Detached", "Townhouse", "Condo Townhouse", "Condo Apartment"];
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const hash = (text) => createHash("sha256").update(text).digest("hex").slice(0, 10);
-
-// Compact per-area, per-home-type monthly series for the site, plus an "All" series that
-// combines all nine TRREB property types (sales-weighted average price, since medians
-// can't be combined across types).
-function siteData(market) {
-  const months = [...new Set(market.records.map((r) => r.date))].sort();
-  const index = new Map(months.map((m, i) => [m, i]));
-  const n = months.length;
-  const blank = () => ({ m: Array(n).fill(null), s: Array(n).fill(null), a: Array(n).fill(null), r: Array(n).fill(null), d: Array(n).fill(null), i: Array(n).fill(null), v: Array(n).fill(null) });
-  const series = {};
-  const totals = {};
-  for (const r of market.records) {
-    const i = index.get(r.date);
-    const sales = r.sales || 0;
-    const t = (totals[r.city] ??= Array.from({ length: n }, () => ({ sales: 0, active: 0, priceSum: 0, slrSum: 0, domSum: 0, weight: 0 })))[i];
-    t.sales += sales;
-    t.active += r.activeListings || 0;
-    if (sales && r.averagePrice) t.priceSum += r.averagePrice * sales;
-    if (sales && r.saleToList && r.daysOnMarket) { t.slrSum += r.saleToList * sales; t.domSum += r.daysOnMarket * sales; t.weight += sales; }
-    if (!HOME_TYPES.includes(r.propertyType)) continue;
-    const s = (series[`${r.city}|${r.propertyType}`] ??= blank());
-    s.m[i] = r.medianPrice ? Math.round(r.medianPrice / 1000) : null;
-    s.v[i] = r.averagePrice ? Math.round(r.averagePrice / 1000) : null;
-    s.s[i] = r.sales;
-    s.a[i] = r.activeListings;
-    s.r[i] = r.saleToList || null;
-    s.d[i] = r.daysOnMarket || null;
-    s.i[i] = r.monthsOfInventory ? Math.round(r.monthsOfInventory * 10) / 10 : null;
-  }
-  for (const [city, rows] of Object.entries(totals)) {
-    const s = blank();
-    rows.forEach((t, i) => {
-      s.s[i] = t.sales;
-      s.a[i] = t.active;
-      if (t.sales) { s.m[i] = s.v[i] = Math.round(t.priceSum / t.sales / 1000); s.i[i] = Math.round((t.active / t.sales) * 10) / 10; }
-      if (t.weight) { s.r[i] = Math.round(t.slrSum / t.weight); s.d[i] = Math.round(t.domSum / t.weight); }
-    });
-    series[`${city}|All`] = s;
-  }
-  for (const key of Object.keys(series)) if (!series[key].s.some((v) => v)) delete series[key];
-  return { months: months.map((m) => m.slice(0, 7)), types: ["All", ...HOME_TYPES], cities: market.cities, d: series };
-}
 
 function pageUrl(lang, token) {
   return BASE + (lang === "zh" ? "zh/" : "") + routeHelpers.pathFor(token);
@@ -140,7 +104,11 @@ function main() {
   const js = readFileSync(join(SITE, "src/app.js"), "utf8");
   const assets = { css: hash(css), js: hash(js) };
 
-  rmSync(OUT, { recursive: true, force: true });
+  const dashboard = join(ROOT, "github-dist");
+  if (!existsSync(join(dashboard, "index.html"))) throw new Error("The dashboard build (github-dist/) is missing. Run npm run build:pages first, or npm run build:site to do both.");
+  rmSync(DIST, { recursive: true, force: true });
+  cpSync(dashboard, DIST, { recursive: true });
+  if (existsSync(join(ROOT, "public/.nojekyll"))) cpSync(join(ROOT, "public/.nojekyll"), join(DIST, ".nojekyll"));
   mkdirSync(join(OUT, "assets"), { recursive: true });
   mkdirSync(join(OUT, "data"), { recursive: true });
   writeFileSync(join(OUT, "assets/styles.css"), css);
@@ -149,7 +117,7 @@ function main() {
   for (const file of ["favicon.svg", "og.png", ".nojekyll"]) if (existsSync(join(ROOT, "public", file))) cpSync(join(ROOT, "public", file), join(OUT, file));
 
   const tokens = ["home", "explore", "areas", "letters", "afford", "compare", ...data.months.map((m) => `letter.${m}`), ...areaRoutes(data)];
-  const urls = [];
+  const urls = [ORIGIN + HOME];
   for (const lang of ["en", "zh"]) {
     for (const token of tokens) {
       const page = renderPage(data, token, lang, BASE);
@@ -162,13 +130,14 @@ function main() {
     writeFileSync(join(feedDir, "feed.xml"), rss(data, lang));
   }
 
-  writeFileSync(join(OUT, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `<url><loc>${u}</loc></url>`).join("\n")}\n</urlset>\n`);
-  writeFileSync(join(OUT, "robots.txt"), `User-agent: *\nAllow: /\nSitemap: ${ORIGIN + BASE}sitemap.xml\n`);
-  writeFileSync(join(OUT, "404.html"), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found · GTA Housing Market</title><link rel="stylesheet" href="${BASE}assets/styles.css?v=${assets.css}"></head><body><main class="wrap" style="padding-block:80px;display:flex;flex-direction:column;gap:16px"><h1>Page not found</h1><p class="lede" lang="zh-CN">找不到这个页面。</p><p><a href="${BASE}">Go to the home page</a> · <a href="${BASE}zh/" lang="zh-CN">返回首页</a></p></main></body></html>\n`);
+  writeFileSync(join(DIST, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `<url><loc>${u}</loc></url>`).join("\n")}\n</urlset>\n`);
+  writeFileSync(join(DIST, "robots.txt"), `User-agent: *\nAllow: /\nSitemap: ${ORIGIN + HOME}sitemap.xml\n`);
+  // Before the swap these pages sat at the root and the dashboard at /legacy/. The 404 page sends
+  // those old addresses to where the same thing is now, and shows "not found" for anything else.
+  const moved = `(function(){var home=${JSON.stringify(HOME)},p=location.pathname;if(p.indexOf(home)!==0)return;var rest=p.slice(home.length);if(/^legacy(\\/|$)/.test(rest)){location.replace(home+location.search+location.hash);return}if(rest&&rest.indexOf(${JSON.stringify(ADVANCED)})!==0&&/^(zh|letters|areas|explore|tools)(\\/|$)/.test(rest))location.replace(home+${JSON.stringify(ADVANCED)}+rest+location.search+location.hash)})();`;
+  writeFileSync(join(DIST, "404.html"), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found · GTA Housing Market</title><script>${moved}</script><link rel="stylesheet" href="${BASE}assets/styles.css?v=${assets.css}"></head><body><main class="wrap" style="padding-block:80px;display:flex;flex-direction:column;gap:16px"><h1>Page not found</h1><p class="lede" lang="zh-CN">找不到这个页面。</p><p><a href="${HOME}">Go to the dashboard</a> · <a href="${HOME}" lang="zh-CN">返回数据看板</a></p></main></body></html>\n`);
 
-  const legacy = join(ROOT, "github-dist");
-  if (existsSync(legacy)) cpSync(legacy, join(OUT, "legacy"), { recursive: true });
-  console.log(`Built ${urls.length} pages through ${data.months.at(-1)}${existsSync(legacy) ? ", with the legacy dashboard at /legacy/" : " (legacy dashboard not found; run npm run build:pages first)"}.`);
+  console.log(`Built the dashboard at ${HOME} and ${urls.length - 1} advanced pages under ${BASE}, through ${data.months.at(-1)}.`);
 }
 
 main();

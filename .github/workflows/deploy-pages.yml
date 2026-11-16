@@ -24,7 +24,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The new multi-page site, with the original dashboard copied in at /legacy/
+      # The dashboard at the root, with the multi-page Advanced site under /advanced/
       - run: npm run build:site
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

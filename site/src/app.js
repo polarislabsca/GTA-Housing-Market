@@ -19,7 +19,7 @@ const MON_EN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov",
 const MON_FULL=["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const S={en:{
- nav:["Home","Explore","Areas","Letters","Where can I afford?","Compare"],legacy:"Legacy dashboard",
+ nav:["Home","Explore","Areas","Letters","Where can I afford?","Compare"],legacy:"← Dashboard",
  brand:"GTA Housing Market",sub:"TRREB monthly market intelligence",badge:"Built by Polaris Labs",proto:"Sample site",addr:"Page address on the real site:",
  median:"Median price",avg:"Average price",sales:"Sales",dom:"Days on market",slr:"Sale-to-list",moi:"Months of inventory",active:"Homes for sale",
  yoy:"y/y",seller:"Seller's market",balanced:"Balanced",buyer:"Buyer's market",flag:"Unusual jump, check data",
@@ -27,7 +27,7 @@ const S={en:{
  seeReport:"See the report",gtaNow:"GTA this month",readLetter:"Read the market letter",
  homeCards:[["Where can I afford?","Set a budget and see which areas are in reach.","Try the calculator"],["Compare areas","Put up to four areas side by side.","Compare now"],["Explore the market","Trends, seasonality, and leaderboards.","Open Explore"]],
  movers:"Biggest movers",moversNote:"Median price change from a year ago, areas with 30+ sales.",popular:"Popular areas",
- exploreTitle:"Explore",exploreLede:"Trends across every area and home type. The original dashboard stays available as the legacy dashboard, unchanged.",openLegacy:"Open the legacy dashboard",
+ exploreTitle:"Explore",exploreLede:"Trends across every area and home type. For one area and home type at a time, go back to the dashboard.",openLegacy:"Back to the dashboard",
  unitsTitle:"Units sold by month",seasonNote:"Units sold each month, one line per year. Is this month weak, or just a normal month for the season?",
  priceTitle:"Median and average price",priceNote:"Median is the middle sale price; average is pulled up by expensive sales. A widening gap means more high-end sales.",priceAllNote:"All home types shows the average price only. TRREB publishes medians per home type.",
  range1:"1 year",range2:"2 years",range5:"5 years",rangeAll:"Since 2021",
@@ -54,7 +54,7 @@ const S={en:{
   ["Read the monthly letter","Every month we explain what changed in plain language. Share it as a poster with a QR code, or copy the summary into a message."],
   ["See what you can afford","Enter a budget, down payment, and mortgage rate to see which areas and home types are within reach, with the monthly payment for each."],
   ["Compare areas","Put up to four areas side by side: prices, speed of sale, supply, and competition."],
-  ["Explore the market","Trends, seasonality, and leaderboards across every area. The original dashboard is still here too, under Legacy dashboard."],
+  ["Explore the market","Trends, seasonality, and leaderboards across every area. Dashboard takes you back to the simple view."],
   ["中文 / English","Switch languages anytime. In Chinese, area names show in both languages."]]},
  shareLetter:"Share this letter",shareLede:"Share this month's numbers or our written summary as a poster with a QR code that opens the full letter, or copy the summary as text.",makePoster:"Numbers poster",makeSummary:"Summary poster",copySummary:"Copy summary text",copied:"Copied. Paste it into WeChat, WhatsApp, or an email.",copyFallback:"Select the text below and copy it.",readFull:"Read the full letter",downloadPoster:"Download image",posterHow:["Download the poster, then share it on WeChat, WhatsApp, Instagram, or anywhere else.","Anyone who scans the QR code lands on this letter."],saveFailed:"Couldn't save the image. Please try again.",scanToRead:"Scan to read the full letter",posterKpi:["Average price","Homes sold","Days on market","Inventory (months)"],posterTag:"Free monthly GTA housing data for every area and home type, from TRREB reports.",
  affTitle:"Where can I afford?",affLede:"Enter a price, down payment, and rate. See which areas and home types have a median price within reach, and the monthly payment for each.",
@@ -62,9 +62,9 @@ const S={en:{
  insured:"With less than 20% down the mortgage is insured. Insured mortgages max out at 25 years, or 30 for first-time buyers and new builds.",showAll:n=>`Show all ${n}`,
  affNote:"Calculator only, not financial advice. Stress test uses the higher of your rate plus 2% or 5.25%.",
  cmpTitle:"Compare areas",cmpLede:"Pick up to four areas and a home type.",none:"None",
- footer:"Source: TRREB Market Watch monthly reports. Data through {month}. Market state uses months of inventory: under 2.5 is a seller's market, over 5 is a buyer's market.",
+ footer:"Source: TRREB Market Watch monthly reports. Data through {month}. Market state uses months of inventory: under 3 is a seller's market, 4 or more is a buyer's market.",
 },zh:{
- nav:["首页","深度分析","地区","月度市场报告","我能买得起哪里？","地区对比"],legacy:"旧版仪表板",
+ nav:["首页","深度分析","地区","月度市场报告","我能买得起哪里？","地区对比"],legacy:"← 数据看板",
  brand:"大多伦多房地产市场",sub:"TRREB 月度市场数据",badge:"由 Polaris Labs 打造",proto:"示例网站",addr:"正式网站中的页面地址：",
  median:"中位价",avg:"均价",sales:"成交量",dom:"平均在售天数",slr:"成交价/挂牌价",moi:"库存月数",active:"在售房源",
  yoy:"同比",seller:"卖方市场",balanced:"平衡市场",buyer:"买方市场",flag:"异常波动，需核实数据",
@@ -72,7 +72,7 @@ const S={en:{
  seeReport:"查看报告",gtaNow:"本月大多伦多",readLetter:"阅读月度市场报告",
  homeCards:[["我能买得起哪里？","设定预算，看看哪些地区在可承受范围内。","试试计算器"],["地区对比","最多四个地区并排比较。","开始对比"],["深度分析","趋势、季节性与排行榜。","打开深度分析"]],
  movers:"涨跌榜",moversNote:"中位价同比变化，仅含成交 30 套以上的地区。",popular:"热门地区",
- exploreTitle:"深度分析",exploreLede:"覆盖所有地区和房型的趋势。原有仪表板作为旧版保留，内容不变。",openLegacy:"打开旧版仪表板",
+ exploreTitle:"深度分析",exploreLede:"覆盖所有地区和房型的趋势。如果只想看某一个地区和房型，请返回数据看板。",openLegacy:"返回数据看板",
  unitsTitle:"每月成交套数",seasonNote:"每年一条线，对比每月成交套数：本月是真的疲软，还是季节性正常？",
  priceTitle:"中位价与均价",priceNote:"中位价是成交价的中间值；均价会被高价成交拉高。两者差距扩大，说明高端成交增多。",priceAllNote:"「所有房型」只显示均价，TRREB 的中位价按房型分别公布。",
  range1:"近一年",range2:"近两年",range5:"近五年",rangeAll:"2021 年至今",
@@ -99,7 +99,7 @@ const S={en:{
   ["阅读月度市场报告","每月用通俗的语言解读市场变化。可生成带二维码的海报分享，或复制文字摘要发给朋友。"],
   ["看看能买得起哪里","输入预算、首付和贷款利率，即可看到哪些地区和房型在可承受范围内，以及各自的每月还款额。"],
   ["地区对比","最多四个地区并排比较：价格、成交速度、供应量和竞争程度。"],
-  ["深度分析","覆盖所有地区的趋势、季节性与排行榜。原有仪表板也保留在「旧版仪表板」中。"],
+  ["深度分析","覆盖所有地区的趋势、季节性与排行榜。点击「数据看板」可返回简洁视图。"],
   ["中文 / English","随时切换语言。中文模式下，地区名称以中英双语显示。"]]},
  shareLetter:"分享本期报告",shareLede:"把本月数据或我们的文字摘要生成带二维码的海报（扫码即可打开完整报告），或直接复制摘要文字分享。",makePoster:"数据海报",makeSummary:"摘要海报",copySummary:"复制摘要文字",copied:"已复制，可粘贴到微信、WhatsApp 或邮件。",copyFallback:"请选中下方文字并复制。",readFull:"阅读完整报告",downloadPoster:"下载图片",posterHow:["下载海报后，即可分享到微信、WhatsApp、小红书等任何平台。","扫描二维码即可打开本期报告。"],saveFailed:"无法保存图片，请重试。",scanToRead:"扫码阅读完整报告",posterKpi:["平均成交价","成交套数","平均在售天数","库存月数"],posterTag:"免费的大多伦多月度房市数据，涵盖每个地区和房型，来源于 TRREB 报告。",
  affTitle:"我能买得起哪里？",affLede:"输入房价、首付和利率，看看哪些地区和房型的中位价在可承受范围内，以及各自的每月还款额。",
@@ -107,7 +107,7 @@ const S={en:{
  insured:"首付低于 20% 需购买房贷保险。保险房贷最长 25 年，首次购房者或新房可达 30 年。",showAll:n=>`显示全部 ${n} 条`,
  affNote:"仅为计算工具，不构成财务建议。压力测试利率取「您的利率 + 2%」与 5.25% 中较高者。",
  cmpTitle:"地区对比",cmpLede:"最多选择四个地区和一种房型。",none:"无",
- footer:"数据来源：TRREB Market Watch 月度报告，更新至 {month}。市场状态依据库存月数：低于 2.5 为卖方市场，高于 5 为买方市场。",
+ footer:"数据来源：TRREB Market Watch 月度报告，更新至 {month}。市场状态依据库存月数：低于 3 为卖方市场，4 及以上为买方市场。",
 }};
 
 let D=null,lang="en",charts=[],TREE=[],ROUTE="home",BASE="/GTA-Housing-Market/",app=null;
@@ -131,9 +131,12 @@ const yoy=(a,i)=>a&&a[i]!=null&&a[i-12]!=null&&a[i-12]?(a[i]/a[i-12]-1)*100:null
 const pct=(v,dig=1)=>v==null?"—":(v>0?"+":"")+v.toFixed(dig)+"%";
 const apct=v=>Math.abs(v).toFixed(1)+"%";
 const dcls=v=>v==null||Math.abs(v)<0.5?"flat":v>0?"up":"down";
-const stateOf=m=>m==null?null:m<2.5?"seller":m>5?"buyer":"balanced";
+// Same rule as the dashboard: under 3 months of inventory is a seller's market, 4 or more a buyer's market.
+const stateOf=m=>m==null?null:m<3?"seller":m>=4?"buyer":"balanced";
 const chip=m=>{const s=stateOf(m);return s?`<span class="chip ${s}"><span class="dot"></span>${T()[s]}</span>`:""};
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+// These pages are the dashboard's Advanced mode and sit one folder below it.
+const home=()=>BASE.replace(/advanced\/$/,"");
 const h=r=>BASE+(lang==="zh"?"zh/":"")+pathFor(r);
 const langHref=()=>BASE+(lang==="zh"?"":"zh/")+pathFor(ROUTE);
 const seg=(id,items,pressed)=>`<div class="seg" id="${id}">${items.map(([v,l])=>`<button type="button" data-v="${v}" aria-pressed="${pressed(v)}">${l}</button>`).join("")}</div>`;
@@ -163,7 +166,7 @@ function pathFor(token){const p=token.split(".");if(p[0]==="area")return `areas/
 function shellParts(p){
   const t=T(),keys=["home","explore","areas","letters","afford","compare"],cur=p[0]==="area"?"areas":p[0]==="letter"?"letters":p[0];
   return {
-    nav:keys.map((k,i)=>`<a href="${h(k)}" data-tour="nav-${k}"${cur===k?' aria-current="page"':""}>${t.nav[i]}</a>`).join("")+`<a class="legacy" data-tour="nav-legacy" href="${BASE}legacy/">${t.legacy}</a>`,
+    nav:`<a class="legacy" data-tour="nav-legacy" href="${home()}">${t.legacy}</a>`+keys.map((k,i)=>`<a href="${h(k)}" data-tour="nav-${k}"${cur===k?' aria-current="page"':""}>${t.nav[i]}</a>`).join(""),
     foot:`<p style="margin:0 0 8px">${t.footer.replace("{month}",mfull(L()))}</p><button type="button" class="linkbtn" data-start-tour>${t.tour.link}</button>`,
     langLabel:lang==="zh"?"English":"中文",
   };
@@ -391,7 +394,7 @@ function drawCost(){
 let exRange="all";
 function pageExplore(){
   const t=T();
-  return `<section><h1>${t.exploreTitle}</h1><p class="lede">${t.exploreLede}</p><p><a href="${BASE}legacy/">${t.openLegacy} →</a></p></section>
+  return `<section><h1>${t.exploreTitle}</h1><p class="lede">${t.exploreLede}</p><p><a href="${home()}">← ${t.openLegacy}</a></p></section>
   <section class="controls" style="margin:0"><select id="sArea" aria-label="${t.area}">${areaOptions("All TRREB Areas")}</select>${typeSelect("sType",0)}</section>
   <section class="card"><h2>${t.unitsTitle}</h2><p class="muted small" style="margin-top:-6px">${t.seasonNote}</p><div class="legend" id="sLeg"></div><div class="chartbox"><canvas id="cSeason" role="img" aria-label="${t.unitsTitle}"></canvas></div></section>
   <section class="card"><div class="controls" style="justify-content:space-between"><h2 style="margin:0">${t.priceTitle}</h2>${seg("pRange",[["12",t.range1],["24",t.range2],["60",t.range5],["all",t.rangeAll]],v=>v==="all")}</div><p class="muted small" id="pNote" style="margin-top:0"></p><div class="legend" id="pLeg"></div><div class="chartbox"><canvas id="cExPrice" role="img" aria-label="${t.priceTitle}"></canvas></div></section>
@@ -740,10 +743,10 @@ function render(){
 function boot(){
   const b=document.body.dataset;ROUTE=b.route;lang=b.lang;BASE=b.base;app=$("app");
   if(ROUTE==="home"&&lang==="en"){
-    // Links to the original dashboard carried filters in the address (?city=…); send those to the legacy page.
-    if(/[?&](city|type|from|to|price|vol)=/.test(location.search)){location.replace(BASE+"legacy/"+location.search);return}
     if(savedLang()==="zh"){location.replace(BASE+"zh/");return}
   }
+  // The dashboard opens in whichever language was last read here.
+  try{localStorage.setItem("housing-dashboard-locale",lang)}catch(e){}
   try{if(sessionStorage.getItem("gta-start-tour")==="1"){sessionStorage.removeItem("gta-start-tour");if(ROUTE==="home")tourStep=0}}catch(e){}
   $("langBtn").onclick=()=>{saveLang(lang==="zh"?"en":"zh");location.href=langHref()};
   addEventListener("resize",replaceTour);addEventListener("scroll",replaceTour,{passive:true});
